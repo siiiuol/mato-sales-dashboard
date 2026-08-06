@@ -1,0 +1,117 @@
+product_owner:
+  nace_2008:
+    - "1071"    # manufacture of bread / fresh pastry
+    - "1072"    # rusks / biscuits
+    - "1073"    # pasta
+    - "1051"    # dairy
+    - "1082"    # cocoa / chocolate / sugar confectionery
+    - "1085"    # prepared meals
+    - "1089"    # other food products
+    - "10"      # food manufacturing (prefix)
+    - "11"      # beverages
+    - "463"     # wholesale food
+    - "4721"    # fruit veg
+    - "4722"    # meat
+    - "4723"    # fish
+    - "4724"    # bread pastry retail
+    - "4729"
+    - "472"
+    - "4781"
+    - "561"
+    - "562"     # catering
+    - "4776"    # flowers
+  keywords:
+    - bakkerij
+    - bakker
+    - bakery
+    - brood
+    - patisserie
+    - banket
+    - pastry
+    - butcher
+    - slagerij
+    - slager
+    - cater
+    - traiteur
+    - mealprep
+    - meal-prep
+    - chocolat
+    - chocolaterie
+    - ijssalon
+    - ice cream
+    - florist
+    - bloemist
+    - delicatessen
+    - delicatessen
+    - farm shop
+    - hoevewinkel
+    - hoeve
+    - kaas
+    - zuivel
+    - viswinkel
+
+host_location:
+  nace_2008:
+    - "25"
+    - "28"
+    - "29"
+    - "30"
+    - "41"
+    - "42"
+    - "43"
+    - "45"
+    - "49"
+    - "52"
+    - "55"
+    - "85"
+    - "86"
+    - "87"
+    - "93"
+    - "96"
+  keywords:
+    - factory
+    - fabriek
+    - warehouse
+    - magazijn
+    - logistics
+    - kantoor
+    - office
+    - hospital
+    - ziekenhuis
+    - gym
+    - fitness
+    - hotel
+    - camping
+    - school
+    - student
+    - garage
+
+multi_location:
+  keywords:
+    - franchise
+    - keten
+    - vestigingen
+    - locations
+    - winkels
+    - group
+    - groep
+    - facility management
+    - property management
+
+# Display categories for Review UI grouping
+category_rules:
+  Bakeries:
+    keywords: [bakkerij, bakker, bakery, brood, patisserie, banket, pastry]
+    nace: ["1071", "1072", "4724"]
+  Butcheries / deli:
+    keywords: [slagerij, slager, butcher, delicatessen, delicatessen, vlees]
+    nace: ["4722", "101"]
+  Traiteurs / meal prep:
+    keywords: [traiteur, cater, mealprep, meal-prep, maaltijd]
+    nace: ["562", "1085"]
+  Chocolatiers / sweets:
+    keywords: [chocolat, chocolaterie, ijssalon, ice cream, confiserie, dessert]
+    nace: ["1082"]
+  Host locations:
+    keywords: [fabriek, magazijn, fitness, hotel, school, ziekenhuis, kantoor]
+    nace: ["52", "55", "85", "86", "93"]

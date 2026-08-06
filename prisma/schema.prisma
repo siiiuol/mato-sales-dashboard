@@ -1,0 +1,686 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Lead {
+  id                          String    @id @default(cuid())
+  name                        String
+  address                     String?
+  city                        String?
+  province                    String?
+  lat                         Float?
+  lng                         Float?
+  category                    String?
+  phone                       String?
+  email                       String?
+  website                     String?
+  mapsUrl                     String?
+  placeId                     String?   @unique
+  intelligenceEstablishmentId String?   @unique
+  intelligenceEnterpriseId    String?
+  establishmentName           String?
+  enterpriseName              String?
+  source                      String    @default("lead_bot")
+  sourceVersion               String?
+  score                       Int       @default(0)
+  timingScore                 Int       @default(0)
+  distanceKm                  Float?
+  tier                        String?
+  reason                      String?
+  evidenceSummary             String?
+  recommendedMachine          String?
+  recommendedAngle            String?
+  phoneOpener                 String?
+  discoveryQuestions          String?
+  likelyObjection             String?
+  outreachPrep                String?
+  status                      String    @default("NEW")
+  nextActionAt                DateTime?
+  lastTouchedAt               DateTime?
+  notes                       String?
+  complianceStatus            String    @default("PENDING")
+  doNotContact                Boolean   @default(false)
+  suppressionReason           String?
+  suppressionCheckedAt        DateTime?
+  createdAt                   DateTime  @default(now())
+  updatedAt                   DateTime  @updatedAt
+
+  outreach    OutreachEvent[]
+  customer    Customer?
+  deals       Deal[]
+  tasks       Task[]
+  meetings    Meeting[]
+  quotes      Quote[]
+  emailDrafts EmailDraft[]
+  contacts    Contact[]
+  documents   GeneratedDocument[]
+}
+
+model OutreachEvent {
+  id             String    @id @default(cuid())
+  leadId         String
+  type           String    @default("CALL")
+  outcome        String?
+  note           String?
+  nextFollowUpAt DateTime?
+  createdAt      DateTime  @default(now())
+  createdById    String?
+
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id])
+}
+
+model DetectionRun {
+  id           String    @id @default(cuid())
+  zone         String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  createdCount Int       @default(0)
+  skippedCount Int       @default(0)
+  status       String    @default("running")
+  detail       String?
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  address   String?
+  city      String?
+  province  String?
+  phone     String?
+  email     String?
+  website   String?
+  notes     String?
+  leadId    String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead             Lead?             @relation(fields: [leadId], references: [id])
+  deals            Deal[]
+  purchases        Purchase[]
+  tasks            Task[]
+  meetings         Meeting[]
+  quotes           Quote[]
+  sourcingRequests SourcingRequest[]
+  contacts         Contact[]
+  creativeRequests CreativeRequest[]
+  documents        GeneratedDocument[]
+}
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  line        String
+  sku         String?
+  description String?
+  specs       String?
+  listPrice   Float
+  cost        Float    @default(0)
+  recurring   Boolean  @default(false)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dealLines        DealLine[]
+  purchases        Purchase[]
+  creativeRequests CreativeRequest[]
+  brandAssets      BrandAsset[]
+}
+
+model Deal {
+  id                   String    @id @default(cuid())
+  title                String
+  stage                String    @default("QUALIFIED")
+  leadId               String?
+  customerId           String?
+  expectedCloseAt      DateTime?
+  nextStep             String?
+  discountPercent      Float     @default(0)
+  notes                String?
+  wonAt                DateTime?
+  expectedMachineCount Int       @default(1)
+  recurringValue       Float     @default(0)
+  probability          Int       @default(25)
+  grossMargin          Float?
+  lossReason           String?
+  lastActivityAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  lead             Lead?             @relation(fields: [leadId], references: [id])
+  customer         Customer?         @relation(fields: [customerId], references: [id])
+  lines            DealLine[]
+  tasks            Task[]
+  meetings         Meeting[]
+  quotes           Quote[]
+  sourcingRequests SourcingRequest[]
+  creativeRequests CreativeRequest[]
+  documents        GeneratedDocument[]
+}
+
+model DealLine {
+  id        String @id @default(cuid())
+  dealId    String
+  productId String
+  qty       Int    @default(1)
+  unitPrice Float
+
+  deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Purchase {
+  id          String   @id @default(cuid())
+  customerId  String
+  productId   String
+  qty         Int      @default(1)
+  unitPrice   Float
+  purchasedAt DateTime @default(now())
+  notes       String?
+  dealLineId  String?  @unique
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         String   @default("sales")
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tasks            Task[]
+  outreach         OutreachEvent[]
+  auditEvents      AuditEvent[]
+  sourcingRequests SourcingRequest[]
+  contacts         Contact[]
+  creativeRequested CreativeRequest[] @relation("CreativeRequested")
+  creativeAssigned  CreativeRequest[] @relation("CreativeAssigned")
+  creativeApproved  CreativeRequest[] @relation("CreativeApproved")
+  creativeVersions  CreativeVersion[]
+  brandAssets       BrandAsset[]
+  templatesOwned    DocumentTemplate[] @relation("TemplateOwner")
+  templatesApproved DocumentTemplate[] @relation("TemplateApprover")
+  documentsCreated  GeneratedDocument[] @relation("DocumentCreator")
+  documentsApproved GeneratedDocument[] @relation("DocumentApprover")
+}
+
+model Campaign {
+  id            String    @id @default(cuid())
+  name          String
+  objective     String    @default("LEAD_GENERATION")
+  audience      String?
+  offer         String?
+  budget        Float     @default(0)
+  spend         Float     @default(0)
+  startAt       DateTime?
+  endAt         DateTime?
+  channels      String?
+  landingPage   String?
+  status        String    @default("PLANNED")
+  leadsGenerated Int      @default(0)
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  creativeRequests CreativeRequest[]
+  assets           BrandAsset[]
+}
+
+model CreativeRequest {
+  id            String    @id @default(cuid())
+  code          String    @unique
+  title         String
+  type          String    @default("SOCIAL_POST")
+  objective     String?
+  audience      String?
+  platform      String?
+  format        String?
+  dimensions    String?
+  durationSec   Int?
+  mainMessage   String?
+  cta           String?
+  language      String    @default("nl")
+  deadline      DateTime?
+  priority      String    @default("NORMAL")
+  status        String    @default("SUBMITTED")
+  referenceUrls String?
+  notes         String?
+  campaignId    String?
+  customerId    String?
+  dealId        String?
+  productId     String?
+  requestedById String?
+  assignedToId  String?
+  approvedById  String?
+  approvedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  campaign    Campaign? @relation(fields: [campaignId], references: [id])
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  deal        Deal?     @relation(fields: [dealId], references: [id])
+  product     Product?  @relation(fields: [productId], references: [id])
+  requestedBy User?     @relation("CreativeRequested", fields: [requestedById], references: [id])
+  assignedTo  User?     @relation("CreativeAssigned", fields: [assignedToId], references: [id])
+  approvedBy  User?     @relation("CreativeApproved", fields: [approvedById], references: [id])
+  versions    CreativeVersion[]
+}
+
+model CreativeVersion {
+  id          String   @id @default(cuid())
+  requestId   String
+  version     Int      @default(1)
+  fileUrl     String?
+  summary     String?
+  feedback    String?
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  request   CreativeRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation(fields: [createdById], references: [id])
+
+  @@unique([requestId, version])
+}
+
+model BrandAsset {
+  id          String    @id @default(cuid())
+  name        String
+  type        String    @default("IMAGE")
+  fileUrl     String?
+  description String?
+  language    String?
+  fileFormat  String?
+  dimensions  String?
+  status      String    @default("DRAFT")
+  usageRights String?
+  tags        String?
+  version     Int       @default(1)
+  expiresAt   DateTime?
+  campaignId  String?
+  productId   String?
+  ownerId     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  campaign Campaign? @relation(fields: [campaignId], references: [id])
+  product  Product?  @relation(fields: [productId], references: [id])
+  owner    User?     @relation(fields: [ownerId], references: [id])
+}
+
+model DocumentTemplate {
+  id             String    @id @default(cuid())
+  code           String
+  name           String
+  category       String    @default("SALES")
+  language       String    @default("nl")
+  version        Int       @default(1)
+  status         String    @default("DRAFT")
+  numberPrefix   String    @default("DOC")
+  body           String    @default("")
+  requiredFields String?
+  allowedRoles   String?
+  outputFormats  String    @default("PDF")
+  effectiveAt    DateTime?
+  reviewAt       DateTime?
+  approvalSource String?
+  approvedById   String?
+  approvedAt     DateTime?
+  ownerId        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  owner      User?               @relation("TemplateOwner", fields: [ownerId], references: [id])
+  approvedBy User?               @relation("TemplateApprover", fields: [approvedById], references: [id])
+  documents  GeneratedDocument[]
+
+  @@unique([code, version])
+}
+
+model Clause {
+  id          String    @id @default(cuid())
+  code        String
+  title       String
+  category    String    @default("GENERAL")
+  textNl      String    @default("")
+  textFr      String    @default("")
+  textEn      String    @default("")
+  mandatory   Boolean   @default(false)
+  status      String    @default("DRAFT")
+  riskLevel   String    @default("MEDIUM")
+  reviewer    String?
+  explanation String?
+  version     Int       @default(1)
+  effectiveAt DateTime?
+  reviewAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  documentClauses DocumentClause[]
+
+  @@unique([code, version])
+}
+
+model GeneratedDocument {
+  id                String    @id @default(cuid())
+  number            String    @unique
+  title             String
+  templateId        String
+  templateCode      String
+  templateVersion   Int
+  language          String    @default("nl")
+  status            String    @default("DRAFT")
+  body              String    @default("")
+  contextJson       String?
+  validationJson    String?
+  requiresExtReview Boolean   @default(false)
+  extReviewReason   String?
+  customerId        String?
+  supplierId        String?
+  leadId            String?
+  dealId            String?
+  sourcingRequestId String?
+  createdById       String?
+  approvedById      String?
+  approvedAt        DateTime?
+  lockedAt          DateTime?
+  sentAt            DateTime?
+  signedAt          DateTime?
+  signerName        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  template   DocumentTemplate @relation(fields: [templateId], references: [id])
+  customer   Customer?        @relation(fields: [customerId], references: [id])
+  supplier   Supplier?        @relation(fields: [supplierId], references: [id])
+  lead       Lead?            @relation(fields: [leadId], references: [id])
+  deal       Deal?            @relation(fields: [dealId], references: [id])
+  sourcing   SourcingRequest? @relation(fields: [sourcingRequestId], references: [id])
+  createdBy  User?            @relation("DocumentCreator", fields: [createdById], references: [id])
+  approvedBy User?            @relation("DocumentApprover", fields: [approvedById], references: [id])
+  clauses    DocumentClause[]
+}
+
+/// Clause text is snapshotted so an approved document never changes retroactively.
+model DocumentClause {
+  id            String @id @default(cuid())
+  documentId    String
+  clauseId      String
+  clauseCode    String
+  clauseVersion Int
+  orderIndex    Int    @default(0)
+  textSnapshot  String
+
+  document GeneratedDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  clause   Clause            @relation(fields: [clauseId], references: [id])
+}
+
+/// One row per prefix+year; counter only ever increments so numbers are never reused (§43).
+model DocumentSequence {
+  id      String @id
+  prefix  String
+  year    Int
+  counter Int    @default(0)
+}
+
+model Contact {
+  id            String    @id @default(cuid())
+  firstName     String
+  lastName      String?
+  jobTitle      String?
+  department    String?
+  role          String    @default("GENERAL")
+  email         String?
+  phone         String?
+  mobile        String?
+  linkedin      String?
+  wechat        String?
+  whatsapp      String?
+  language      String    @default("nl")
+  preferredVia  String?
+  decisionMaker Boolean   @default(false)
+  influence     String    @default("UNKNOWN")
+  consent       String    @default("UNKNOWN")
+  lastContactAt DateTime?
+  nextFollowUp  DateTime?
+  notes         String?
+  leadId        String?
+  customerId    String?
+  supplierId    String?
+  ownerId       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  owner    User?     @relation(fields: [ownerId], references: [id])
+
+  @@index([leadId])
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+model Supplier {
+  id             String  @id @default(cuid())
+  name           String
+  legalName      String?
+  platform       String?
+  storeUrl       String?
+  website        String?
+  contactPerson  String?
+  email          String?
+  phone          String?
+  wechat         String?
+  whatsapp       String?
+  country        String  @default("China")
+  region         String?
+  factoryType    String  @default("UNKNOWN")
+  categories     String?
+  currency       String  @default("USD")
+  paymentTerms   String?
+  moq            Int?
+  leadTimeDays   Int?
+  sampleTerms    String?
+  certifications String?
+  notes          String?
+
+  qualityScore       Int       @default(0)
+  priceScore         Int       @default(0)
+  reliabilityScore   Int       @default(0)
+  communicationScore Int       @default(0)
+  flexibilityScore   Int       @default(0)
+  documentationScore Int       @default(0)
+  adjustedScore      Int?
+  adjustmentReason   String?
+  lastReviewAt       DateTime?
+
+  status    String   @default("NEW")
+  riskLevel String   @default("MEDIUM")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quotes    SupplierQuote[]
+  contacts  Contact[]
+  documents GeneratedDocument[]
+}
+
+model SourcingRequest {
+  id                String    @id @default(cuid())
+  code              String    @unique
+  title             String
+  category          String    @default("PACKAGING")
+  description       String?
+  refUrls           String?
+  dimensions        String?
+  materials         String?
+  colours           String?
+  printing          String?
+  quantity          Int       @default(0)
+  targetUnitCost    Float?
+  targetSellPrice   Float?
+  requiredMarginPct Float?
+  maxMoq            Int?
+  requiredBy        DateTime?
+  sampleRequired    Boolean   @default(true)
+  priority          String    @default("NORMAL")
+  status            String    @default("SUBMITTED")
+  customerId        String?
+  dealId            String?
+  requestedById     String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  deal        Deal?     @relation(fields: [dealId], references: [id])
+  requestedBy User?     @relation(fields: [requestedById], references: [id])
+  quotes      SupplierQuote[]
+  documents   GeneratedDocument[]
+}
+
+model SupplierQuote {
+  id                String   @id @default(cuid())
+  requestId         String
+  supplierId        String
+  title             String?
+  productUrl        String?
+  currency          String   @default("USD")
+  fxToEur           Float    @default(1)
+  unitPrice         Float
+  moq               Int?
+  sampleCost        Float    @default(0)
+  setupCost         Float    @default(0)
+  mouldCost         Float    @default(0)
+  domesticShipping  Float    @default(0)
+  intlShipping      Float    @default(0)
+  customsPct        Float    @default(0)
+  extraFees         Float    @default(0)
+  contingencyPct    Float    @default(3)
+  productionDays    Int?
+  notes             String?
+  selected          Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  request  SourcingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  supplier Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
+
+model Task {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  status       String    @default("OPEN")
+  priority     Int       @default(50)
+  dueAt        DateTime?
+  completedAt  DateTime?
+  leadId       String?
+  customerId   String?
+  dealId       String?
+  assignedToId String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lead       Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deal       Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  assignedTo User?     @relation(fields: [assignedToId], references: [id])
+}
+
+model Meeting {
+  id         String    @id @default(cuid())
+  title      String
+  startsAt   DateTime
+  endsAt     DateTime?
+  location   String?
+  notes      String?
+  status     String    @default("SCHEDULED")
+  leadId     String?
+  customerId String?
+  dealId     String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  deal     Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+}
+
+model Quote {
+  id              String    @id @default(cuid())
+  number          String    @unique
+  status          String    @default("DRAFT")
+  validUntil      DateTime?
+  notes           String?
+  discountPercent Float     @default(0)
+  leadId          String?
+  customerId      String?
+  dealId          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  lead     Lead?       @relation(fields: [leadId], references: [id])
+  customer Customer?   @relation(fields: [customerId], references: [id])
+  deal     Deal?       @relation(fields: [dealId], references: [id])
+  lines    QuoteLine[]
+}
+
+model QuoteLine {
+  id          String  @id @default(cuid())
+  quoteId     String
+  description String
+  sku         String?
+  qty         Int     @default(1)
+  unitPrice   Float
+  unitCost    Float   @default(0)
+
+  quote Quote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+}
+
+model EmailDraft {
+  id         String    @id @default(cuid())
+  leadId     String
+  subject    String
+  body       String
+  status     String    @default("PREPARED")
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String?
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+}
+
+model AppSettings {
+  id                  String @id @default("default")
+  businessName        String @default("MATO")
+  currency            String @default("EUR")
+  timezone            String @default("Europe/Brussels")
+  placesApiKey        String @default("")
+  detectionCategories String @default("[\"bakery\",\"butcher\",\"patisserie\",\"traiteur\",\"chocolatier\",\"florist\",\"farm shop\"]")
+  enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")
+  exclusionRadiusKm   Float  @default(0.5)
+  pitchTemplates      String @default("{}")
+  accent              String @default("green")
+}

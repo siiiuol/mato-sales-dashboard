@@ -1,0 +1,5 @@
+[console_scripts]
+mato-enrich = lead_bot.jobs.enrich_pipeline:main
+mato-import-kbo = lead_bot.jobs.import_kbo:main
+mato-learning = lead_bot.jobs.learning:main
+mato-seed-demo = lead_bot.jobs.seed_demo:main

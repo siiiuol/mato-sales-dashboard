@@ -1,0 +1,48 @@
+{
+  "name": "mato-app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/**/*.test.ts",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:setup": "prisma db push && tsx prisma/seed.ts",
+    "postinstall": "prisma generate",
+    "db:postgres:schema": "node prisma/prepare-postgres.mjs",
+    "db:postgres:push": "node prisma/prepare-postgres.mjs && prisma db push --schema prisma/schema.postgresql.prisma"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^3.0.3",
+    "date-fns": "^4.4.0",
+    "jose": "^6.2.8",
+    "leaflet": "^1.9.4",
+    "next": "16.3.0",
+    "prisma": "^5.22.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-leaflet": "^5.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.5",
+    "typescript": "^5"
+  }
+}

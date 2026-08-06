@@ -1,0 +1,24 @@
+east_west_flanders:
+  regions:
+    - West-Vlaanderen
+    - Oost-Vlaanderen
+  # Approximate postcode ranges (BE)
+  postcode_ranges:
+    - [8000, 8999]   # West Flanders
+    - [9000, 9999]   # East Flanders
+  municipalities_extra: []
+
+all_flanders:
+  regions:
+    - West-Vlaanderen
+    - Oost-Vlaanderen
+    - Antwerpen
+    - Vlaams-Brabant
+    - Limburg
+  postcode_ranges:
+    - [2000, 2999]
+    - [3000, 3499]
+    - [3500, 3999]
+    - [8000, 8999]
+    - [9000, 9999]
+    - [1500, 1999]

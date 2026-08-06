@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_USER: mato
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mato}
+      POSTGRES_DB: mato_leads
+    ports:
+      - "5432:5432"
+    volumes:
+      - mato_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mato -d mato_leads"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  lead-bot-api:
+    build:
+      context: ./lead-bot
+    command: uvicorn lead_bot.api.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - ./lead-bot/.env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://mato:${POSTGRES_PASSWORD:-mato}@postgres:5432/mato_leads
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./lead-bot:/app
+      - ./lead-bot/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      lead-bot-migrate:
+        condition: service_completed_successfully
+
+  lead-bot-migrate:
+    build:
+      context: ./lead-bot
+    command: alembic upgrade head
+    env_file:
+      - ./lead-bot/.env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://mato:${POSTGRES_PASSWORD:-mato}@postgres:5432/mato_leads
+    volumes:
+      - ./lead-bot:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  lead-bot-worker:
+    build:
+      context: ./lead-bot
+    command: celery -A lead_bot.worker.celery_app worker -l info -Q cbe_import,suppression,entity_resolution,website_discovery,website_crawl,llm_extract,feature_calc,scoring,human_review,crm_export,refresh
+    env_file:
+      - ./lead-bot/.env
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://mato:${POSTGRES_PASSWORD:-mato}@postgres:5432/mato_leads
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    volumes:
+      - ./lead-bot:/app
+      - ./lead-bot/data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      lead-bot-migrate:
+        condition: service_completed_successfully
+
+volumes:
+  mato_pg:
