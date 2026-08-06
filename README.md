@@ -1,13 +1,19 @@
-# MATO Sales OS + Lead Intelligence
+# MATO — lead search, calling, logging
 
-## Apps
+One job: find local businesses worth calling, decide who to call, dial them,
+write down what happened.
 
-| App | Stack | Port |
-|-----|--------|------|
-| CRM dashboard | Next.js · Prisma · SQLite | 3000 |
-| Lead intelligence bot | Starlette · SQLAlchemy · SQLite/Postgres | 8000 |
+```
+Search  →  Triage  →  Call  →  Log
+```
 
-## CRM
+| | |
+|---|---|
+| Stack | Next.js · Prisma · SQLite |
+| Port | 3000 |
+| Screens | Work (`/`), Leads (`/leads`), Calls (`/calls`), Settings (`/settings`) |
+
+## Setup
 
 ```bash
 copy .env.example .env
@@ -16,66 +22,73 @@ npm run db:setup
 npm run dev
 ```
 
-On Windows use `copy .env.example .env`. The seed creates a local admin from
-`MATO_ADMIN_EMAIL` plus `MATO_ADMIN_PASSWORD` or `MATO_ADMIN_PASSWORD_HASH`.
-For a fresh local-only checkout the fallback is `admin@mato.local` /
-`mato-admin-dev`; change it before sharing the environment. Production requires
-a random `SESSION_SECRET` of at least 32 characters. Sessions are Jose-signed,
-HttpOnly, SameSite=Lax cookies. Roles are `admin`, `sales`, and `reviewer`.
+The seed creates a local admin from `MATO_ADMIN_EMAIL` plus
+`MATO_ADMIN_PASSWORD` or `MATO_ADMIN_PASSWORD_HASH`. For a fresh local-only
+checkout the fallback is `admin@mato.local` / `mato-admin-dev`; change it before
+sharing the environment. Production requires a random `SESSION_SECRET` of at
+least 32 characters. Sessions are Jose-signed, HttpOnly, SameSite=Lax cookies.
+Roles are `admin`, `sales`, and `reviewer`.
 
-The lead-bot is the canonical acquisition and review path. The browser only calls
-same-origin `/api/review/**` handlers; `LEAD_BOT_API_KEY` stays server-only.
-Email records are preparation/approval queues only—this CRM has no send action.
+## The loop
 
-### PostgreSQL production path
+**Search** — pick a zone in Leads and press *Search for leads*. This queries
+OpenStreetMap town by town for bakeries, patisseries, butchers, chocolatiers,
+ice-cream shops, traiteurs, cheese shops and farm shops, plus a separate pass
+for premises that already run a vending machine. Free, no API key.
 
-SQLite remains the zero-Docker local database. For production, set
-`DATABASE_URL` to PostgreSQL and generate the equivalent schema:
+**Triage** — every new business waits for your decision. **Contact** puts it on
+the call list; **Skip** hides it. Nothing is deleted: skipped leads stay under
+`/leads?status=SKIPPED` and can be unskipped.
+
+**Call** — the call card shows the number as a `tel:` link with an opener,
+angle, suggested machine, questions and the likely objection.
+
+**Log** — record the outcome. Callbacks set a follow-up date and the lead
+returns to the queue then. The next lead loads automatically.
+
+## Things worth knowing
+
+- **Coverage builds up over several searches.** OpenStreetMap's public servers
+  throttle heavily, so one search typically covers part of a province. Search
+  the same zone again to fill the gaps — results dedupe on OSM id, so nothing
+  doubles up. Each run reports how many towns it managed.
+- **About a third of shops publish a phone number.** Those rank highest; a lead
+  you cannot dial is not yet a lead. The rest usually have a website.
+- **Businesses that already run a vending machine rank top.** They are proven
+  buyers and candidates for a replacement or a second machine, so the scan
+  hunts `amenity=vending_machine` deliberately and flags the operator.
+- **Marking a lead WON stops rescans finding it again**, by name and by
+  proximity (`exclusionRadiusKm` in Settings).
+
+`GOOGLE_PLACES_API_KEY` remains an optional paid upgrade with far better
+coverage; leave it empty to stay on free data.
+
+## Scripts
+
+```bash
+npm run typecheck
+npm test
+npx tsx scripts/smoke-osm-scan.ts "West-Vlaanderen"
+```
+
+The smoke script runs a real search without touching the database and reports
+town coverage, phone-number rate and how many businesses already have a machine.
+
+## PostgreSQL
+
+SQLite is the zero-Docker local database. For production set `DATABASE_URL` to
+PostgreSQL and generate the equivalent schema:
 
 ```bash
 npm run db:postgres:schema
 npx prisma migrate dev --schema prisma/schema.postgresql.prisma --name initial
-npx prisma migrate deploy --schema prisma/schema.postgresql.prisma
 ```
 
-Commit the generated PostgreSQL migration history in a production rollout.
-`npm run db:postgres:push` is available for disposable staging databases only;
-use migrations for production. Re-run `db:postgres:schema` after model changes.
+Commit the generated migration history in a production rollout. Re-run
+`db:postgres:schema` after model changes.
 
-## Free local setup (no paid Places / OpenAI)
+## `lead-bot/`
 
-MATO defaults to **free public data**:
-
-| Need | Source |
-|------|--------|
-| Company universe | [KBO / CBE Open Data](https://kbopub.economie.fgov.be/kbo-open-data/login) (free ZIP) |
-| Local POIs / phone / hours | OpenStreetMap via Overpass |
-| Website evidence | Public HTTP crawl + heuristic extract |
-
-```bash
-cd lead-bot
-copy .env.example .env
-python -m venv .venv
-.\.venv\Scripts\activate
-pip install -e .
-
-# 1) Register at KBO Open Data, download Full ZIP → data/kbo/latest.zip
-python -m lead_bot.jobs.import_kbo --path data/kbo/latest.zip --region east_west_flanders
-python -m lead_bot.jobs.enrich_pipeline --min-preliminary 30 --limit 100
-
-# 2) Start API (Google/OpenAI keys optional — leave empty)
-uvicorn lead_bot.api.main:app --reload --port 8000
-```
-
-Then open **Work** / **Review** at http://localhost:3000. Zone Scan in Leads uses OSM when no Google Places key is set in Settings.
-
-Details: [docs/free-data-sources.md](docs/free-data-sources.md).
-
-Optional Docker Postgres/Redis: `docker compose up -d` (see root `docker-compose.yml`).
-
-`GOOGLE_PLACES_API_KEY` / `OPENAI_API_KEY` remain optional paid upgrades.
-
-Full bot docs: [lead-bot/README.md](lead-bot/README.md)
-
-Learning evaluation, budget/freshness controls, and backup/restore procedures:
-[docs/learning-operations-runbook.md](docs/learning-operations-runbook.md).
+An earlier Python enrichment service, no longer wired into the app. It is left
+on disk untouched in case the Belgian enterprise-register (KBO) route is
+revisited; nothing in the app depends on it and it does not need to run.

@@ -64,7 +64,7 @@ export default async function CallsPage({
           Ready <strong>{due.length}</strong>
         </span>
         <span className="ml-auto">
-          <Link href="/work" className="text-[var(--accent)]">
+          <Link href="/" className="text-[var(--accent)]">
             Work mode
           </Link>
         </span>

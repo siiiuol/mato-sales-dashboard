@@ -26,31 +26,29 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 anim-lock max-w-3xl">
       <div>
-        <p className="label">Channel 09</p>
+        <p className="label">Channel 04</p>
         <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Settings</h1>
         <p className="text-sm text-[var(--text-dim)] mt-1">
-          EUR · Europe/Brussels · lead-bot is the canonical acquisition path
+          EUR · Europe/Brussels · lead discovery runs on free OpenStreetMap data
         </p>
       </div>
 
       <section className="panel p-4 text-sm text-[var(--text-dim)] space-y-2">
-        <div className="label text-[var(--accent)]">Free public-data path</div>
+        <div className="label text-[var(--accent)]">How lead search works</div>
         <p>
-          Default discovery uses <span className="mono text-[var(--text)]">KBO Open Data</span>{" "}
-          + <span className="mono text-[var(--text)]">OpenStreetMap</span> (no paid Places key).
-          Download a free KBO Full ZIP to{" "}
-          <span className="mono text-[var(--text)]">lead-bot/data/kbo/latest.zip</span>, then:
-        </p>
-        <p className="mono text-[var(--text)] text-xs leading-relaxed">
-          python -m lead_bot.jobs.import_kbo --path data/kbo/latest.zip --region east_west_flanders
-          <br />
-          python -m lead_bot.jobs.enrich_pipeline --min-preliminary 30 --limit 100
-          <br />
-          uvicorn lead_bot.api.main:app --port 8000
+          Searching a zone queries{" "}
+          <span className="mono text-[var(--text)]">OpenStreetMap</span> town by town
+          for local food businesses, and separately for shops that already run a
+          vending machine. It is free and needs no API key.
         </p>
         <p>
-          Zone Scan in Leads uses Overpass when no Google key is set. See{" "}
-          <span className="mono text-[var(--text)]">docs/free-data-sources.md</span>.
+          OpenStreetMap&apos;s public servers throttle, so one search usually covers
+          part of a province. Search the same zone again to fill the gaps —
+          businesses already found are never duplicated.
+        </p>
+        <p>
+          Roughly a third of shops publish a phone number to OpenStreetMap. Those
+          are ranked highest, since a lead you cannot dial is not yet a lead.
         </p>
       </section>
 

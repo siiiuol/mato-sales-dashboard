@@ -52,10 +52,10 @@ export default function LeadsMapInner({ points }: { points: MapPoint[] }) {
           <CircleMarker
             key={`${p.type}-${p.id}`}
             center={[p.lat, p.lng]}
-            radius={p.type === "customer" ? 8 : 6}
+            radius={p.type === "won" ? 8 : 6}
             pathOptions={{
-              color: p.type === "customer" ? "#3de7ff" : "#39ff8a",
-              fillColor: p.type === "customer" ? "#3de7ff" : "#39ff8a",
+              color: p.type === "won" ? "#3de7ff" : "#39ff8a",
+              fillColor: p.type === "won" ? "#3de7ff" : "#39ff8a",
               fillOpacity: 0.7,
               weight: 1,
             }}

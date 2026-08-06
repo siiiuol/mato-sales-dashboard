@@ -1,9 +1,9 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
-import { createFollowUp, createMeeting, setLeadCompliance } from "@/lib/actions";
+import { contactLead, setLeadCompliance, skipLead, unskipLead } from "@/lib/actions";
+import { TriageButtons } from "@/components/TriageButtons";
 import { idSchema } from "@/lib/validation";
-import { formatEUR } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -17,15 +17,7 @@ export default async function LeadDetailPage({
   if (!parsed.success) notFound();
   const lead = await prisma.lead.findUnique({
     where: { id: parsed.data },
-    include: {
-      outreach: { orderBy: { createdAt: "desc" } },
-      tasks: { orderBy: { dueAt: "asc" } },
-      deals: { include: { lines: true }, orderBy: { updatedAt: "desc" } },
-      meetings: { orderBy: { startsAt: "desc" } },
-      quotes: { orderBy: { createdAt: "desc" } },
-      emailDrafts: { orderBy: { createdAt: "desc" } },
-      customer: { include: { purchases: { include: { product: true } } } },
-    },
+    include: { outreach: { orderBy: { createdAt: "desc" } } },
   });
   if (!lead) notFound();
   const audits = await prisma.auditEvent.findMany({
@@ -40,12 +32,6 @@ export default async function LeadDetailPage({
       at: item.createdAt,
       title: `${item.type} · ${item.outcome || "logged"}`,
       detail: item.note,
-    })),
-    ...lead.tasks.map((item) => ({
-      id: item.id,
-      at: item.createdAt,
-      title: `Task · ${item.title}`,
-      detail: `${item.status}${item.dueAt ? ` · due ${item.dueAt.toLocaleString("nl-BE")}` : ""}`,
     })),
     ...audits.map((item) => ({
       id: item.id,
@@ -65,9 +51,20 @@ export default async function LeadDetailPage({
             {[lead.address, lead.city, lead.province].filter(Boolean).join(" · ")}
           </p>
         </div>
-        <div className="text-right">
+        <div className="text-right space-y-2">
           <div className="score text-3xl">{lead.score}</div>
-          <span className="badge">{lead.status}</span>
+          <div>
+            <span className="badge">{lead.status}</span>
+            {lead.hasVending && <span className="badge badge-live ml-2">HAS VENDING</span>}
+          </div>
+          <TriageButtons
+            leadId={lead.id}
+            status={lead.status}
+            complianceStatus={lead.complianceStatus}
+            contactAction={contactLead}
+            skipAction={skipLead}
+            unskipAction={unskipLead}
+          />
         </div>
       </div>
 
@@ -80,6 +77,7 @@ export default async function LeadDetailPage({
           <Info label="Phone opener" value={lead.phoneOpener} />
           <Info label="Likely objection" value={lead.likelyObjection} />
           <Info label="Evidence" value={lead.evidenceSummary} />
+          <Info label="Existing vending" value={lead.vendingDetail} />
           <Info label="Source version" value={lead.sourceVersion} />
         </section>
 
@@ -100,56 +98,6 @@ export default async function LeadDetailPage({
             <input name="suppressionReason" className="input" placeholder="Reason when blocked" />
             <button className="btn btn-primary w-full">Apply gate</button>
           </form>
-        </section>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="panel p-4">
-          <h2 className="label text-[var(--accent)] mb-3">Follow-up</h2>
-          <form action={createFollowUp} className="grid gap-2">
-            <input type="hidden" name="leadId" value={lead.id} />
-            <input name="title" className="input" placeholder="Follow-up action" required />
-            <input name="dueAt" type="datetime-local" className="input" required />
-            <textarea name="description" className="textarea" placeholder="Context" />
-            <button className="btn btn-primary">Create follow-up</button>
-          </form>
-          <ul className="mt-4 space-y-2 text-sm">
-            {lead.tasks.map((task) => (
-              <li key={task.id}>{task.status} · {task.title} · {task.dueAt?.toLocaleString("nl-BE") || "unscheduled"}</li>
-            ))}
-          </ul>
-        </section>
-
-        <section className="panel p-4">
-          <h2 className="label text-[var(--accent)] mb-3">Deals & installed base</h2>
-          <ul className="space-y-2 text-sm">
-            {lead.deals.map((deal) => (
-              <li key={deal.id} className="flex justify-between">
-                <span>{deal.title} · {deal.stage}</span>
-                <span>{deal.probability}% · {deal.expectedMachineCount} machines</span>
-              </li>
-            ))}
-            {lead.customer?.purchases.map((purchase) => (
-              <li key={purchase.id} className="flex justify-between text-[var(--text-dim)]">
-                <span>Installed: {purchase.qty}× {purchase.product.name}</span>
-                <span>{formatEUR(purchase.qty * purchase.unitPrice)}</span>
-              </li>
-            ))}
-          </ul>
-          <form action={createMeeting} className="grid gap-2 mt-4 border-t border-[var(--border)] pt-4">
-            <input type="hidden" name="leadId" value={lead.id} />
-            <input name="title" className="input" placeholder="Meeting title" required />
-            <input name="startsAt" type="datetime-local" className="input" required />
-            <input name="location" className="input" placeholder="Location / video link" />
-            <button className="btn btn-primary">Schedule meeting</button>
-          </form>
-          {!!lead.meetings.length && (
-            <ul className="mt-3 text-sm text-[var(--text-dim)]">
-              {lead.meetings.map((meeting) => (
-                <li key={meeting.id}>{meeting.startsAt.toLocaleString("nl-BE")} · {meeting.title}</li>
-              ))}
-            </ul>
-          )}
         </section>
       </div>
 

@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { ZONE_CENTERS } from "./constants";
-import { osmCandidates, type OsmCandidate } from "./osm";
+import { scanZoneCandidates, type OsmCandidate } from "./osm";
 
 const CATEGORY_WEIGHT: Record<string, number> = {
   bakery: 34,
@@ -10,9 +10,15 @@ const CATEGORY_WEIGHT: Record<string, number> = {
   patisserie: 32,
   traiteur: 30,
   chocolatier: 28,
+  "ice cream": 30,
+  ijssalon: 30,
+  cheese: 26,
   florist: 24,
   "farm shop": 26,
   hoevewinkel: 26,
+  takeaway: 24,
+  cafe: 18,
+  convenience: 20,
   factory: 18,
   warehouse: 16,
   gym: 14,
@@ -33,25 +39,56 @@ function parseCategories(raw: string): string[] {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
-    return ["bakery", "butcher", "patisserie", "traiteur", "chocolatier", "florist", "farm shop"];
+    return [
+      "bakery",
+      "patisserie",
+      "butcher",
+      "chocolatier",
+      "ice cream",
+      "traiteur",
+      "cheese",
+      "farm shop",
+    ];
   }
 }
 
-function scoreLead(input: {
+export function scoreLead(input: {
   category: string;
   phone?: string | null;
   reviewCount?: number;
+  hasVending?: boolean;
 }): { score: number; reason: string } {
   const base = CATEGORY_WEIGHT[input.category] ?? 15;
+  // A number you can dial is worth more than any other signal in a calling tool.
   const phoneBonus = input.phone ? 25 : 0;
   const sizeBonus = Math.min(20, Math.floor((input.reviewCount ?? 0) / 5));
-  const score = Math.min(99, base + phoneBonus + sizeBonus + 10);
+  // Already running a machine means proven demand — a replacement or second-site
+  // prospect, not a competitor to avoid.
+  const vendingBonus = input.hasVending ? 20 : 0;
+  const score = Math.min(99, base + phoneBonus + sizeBonus + vendingBonus + 10);
   const bits = [
     input.category.charAt(0).toUpperCase() + input.category.slice(1),
+    input.hasVending ? "already has vending" : null,
     input.phone ? "phone available" : "no phone",
     sizeBonus > 0 ? "size proxy" : null,
   ].filter(Boolean);
   return { score, reason: bits.join(" · ") };
+}
+
+/**
+ * Should this candidate be skipped because we already sell there?
+ * Pure so the arithmetic is testable — over-suppressing silently costs leads.
+ */
+export function isExcluded(
+  candidate: { name: string; lat?: number | null; lng?: number | null },
+  wonNames: Set<string>,
+  wonPoints: Array<{ lat: number; lng: number }>,
+  radiusKm: number
+): boolean {
+  if (wonNames.has(candidate.name.trim().toLowerCase())) return true;
+  if (candidate.lat == null || candidate.lng == null) return false;
+  const at = { lat: candidate.lat, lng: candidate.lng };
+  return wonPoints.some((p) => haversineKm(at, p) < radiusKm);
 }
 
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -160,19 +197,38 @@ export async function runDetection(
   try {
     const categories = parseCategories(settings.detectionCategories);
     const useGoogle = Boolean(settings.placesApiKey?.trim());
-    const candidates = useGoogle
-      ? await placesCandidates(zone, categories, settings.placesApiKey.trim())
-      : await osmCandidates(zone, categories);
+    let candidates: OsmCandidate[];
+    let coverage = "";
+    if (useGoogle) {
+      candidates = (await placesCandidates(
+        zone,
+        categories,
+        settings.placesApiKey.trim()
+      )) as OsmCandidate[];
+    } else {
+      const scan = await scanZoneCandidates(zone, categories);
+      candidates = scan.candidates;
+      coverage = `${scan.townsOk}/${scan.townsTotal} towns covered`;
+      if (scan.townsFailed.length) {
+        // OpenStreetMap's public servers throttle, so a scan often covers only
+        // part of a province. Scanning again fills the gaps — results dedupe.
+        coverage += ` · OpenStreetMap was busy for ${scan.townsFailed.join(", ")} — scan again to cover them`;
+      }
+    }
     const source = useGoogle ? "places" : "openstreetmap";
 
-    const customers = await prisma.customer.findMany({
-      select: { name: true },
+    // Places we already sell to. A lead marked WON is the record of that —
+    // there is no separate customer list any more.
+    const wonLeads = await prisma.lead.findMany({
+      where: { status: "WON" },
+      select: { name: true, lat: true, lng: true },
     });
-    // Approximate customer locations via linked leads
-    const customerLeads = await prisma.lead.findMany({
-      where: { customer: { isNot: null }, lat: { not: null }, lng: { not: null } },
-      select: { lat: true, lng: true },
-    });
+    const wonNames = new Set(wonLeads.map((l) => l.name.trim().toLowerCase()));
+    const wonPoints = wonLeads
+      .filter((l): l is typeof l & { lat: number; lng: number } =>
+        l.lat != null && l.lng != null
+      )
+      .map((l) => ({ lat: l.lat, lng: l.lng }));
 
     let created = 0;
     let skipped = 0;
@@ -189,42 +245,24 @@ export async function runDetection(
         continue;
       }
 
-      if (
-        customers.some(
-          (cu) => cu.name.toLowerCase() === c.name.toLowerCase()
-        )
-      ) {
+      if (isExcluded(c, wonNames, wonPoints, settings.exclusionRadiusKm)) {
         skipped++;
         continue;
       }
 
-      if (c.lat != null && c.lng != null) {
-        const tooClose = customerLeads.some((cl) => {
-          if (cl.lat == null || cl.lng == null) return false;
-          return (
-            haversineKm(
-              { lat: c.lat!, lng: c.lng! },
-              { lat: cl.lat, lng: cl.lng }
-            ) < settings.exclusionRadiusKm
-          );
-        });
-        if (tooClose) {
-          skipped++;
-          continue;
-        }
-      }
-
+      const hasVending = "hasVending" in c ? Boolean(c.hasVending) : false;
       const { score, reason } = scoreLead({
         category: c.category,
         phone: c.phone,
         reviewCount: "reviewCount" in c ? (c as { reviewCount?: number }).reviewCount : 0,
+        hasVending,
       });
 
       await prisma.lead.create({
         data: {
           name: c.name,
           address: c.address ?? undefined,
-          city: c.city,
+          city: c.city ?? undefined,
           province: c.province,
           lat: c.lat ?? undefined,
           lng: c.lng ?? undefined,
@@ -237,6 +275,9 @@ export async function runDetection(
           score,
           reason: `${reason} · ${zone}`,
           status: "NEW",
+          hasVending,
+          vendingDetail:
+            "vendingDetail" in c ? ((c as { vendingDetail?: string | null }).vendingDetail ?? null) : null,
         },
       });
       created++;
@@ -249,13 +290,11 @@ export async function runDetection(
         finishedAt: new Date(),
         createdCount: created,
         skippedCount: skipped,
-        detail: useGoogle
-          ? "Google Places scan"
-          : "OpenStreetMap Overpass scan (free public data)",
+        detail: useGoogle ? "Google Places scan" : `OpenStreetMap scan · ${coverage}`,
       },
     });
 
-    return { runId: run.id, created, skipped, demo: false, source };
+    return { runId: run.id, created, skipped, demo: false, source, coverage };
   } catch (err) {
     await prisma.detectionRun.update({
       where: { id: run.id },

@@ -1,10 +1,3 @@
-export type ProductLine =
-  | "MACHINE"
-  | "BEHUIZING"
-  | "PACKAGING"
-  | "TERMINAL"
-  | "TELEMETRY";
-
 export type LeadStatus =
   | "NEW"
   | "TO_CALL"
@@ -16,18 +9,3 @@ export type LeadStatus =
   | "SKIPPED"
   | "DO_NOT_CONTACT";
 
-export type DealStage =
-  | "QUALIFIED"
-  | "PROPOSAL"
-  | "NEGOTIATION"
-  | "WON"
-  | "LOST";
-
-export type OutreachOutcome =
-  | "NO_ANSWER"
-  | "VOICEMAIL"
-  | "WRONG_NUMBER"
-  | "INTERESTED"
-  | "NOT_INTERESTED"
-  | "CALLBACK"
-  | "OTHER";

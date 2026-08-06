@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
-import { createLead } from "@/lib/actions";
+import { contactLead, createLead, skipLead, unskipLead } from "@/lib/actions";
+import { TriageButtons } from "@/components/TriageButtons";
+import { LEAD_STATUSES } from "@/lib/constants";
 import { FLANDERS_ZONES } from "@/lib/constants";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
@@ -20,15 +22,16 @@ export default async function LeadsPage({
     ...(sp.status ? { status: sp.status as never } : {}),
   };
 
-  const [leads, customers, runs, settings] = await Promise.all([
+  const [leads, wonLeads, runs, settings] = await Promise.all([
     prisma.lead.findMany({
       where,
       orderBy: [{ createdAt: "desc" }],
       take: 200,
     }),
-    prisma.customer.findMany({
-      include: { lead: true },
-      take: 100,
+    prisma.lead.findMany({
+      where: { status: "WON", lat: { not: null }, lng: { not: null } },
+      select: { id: true, name: true, lat: true, lng: true },
+      take: 200,
     }),
     prisma.detectionRun.findMany({ orderBy: { startedAt: "desc" }, take: 5 }),
     prisma.appSettings.upsert({
@@ -52,7 +55,7 @@ export default async function LeadsPage({
   }
 
   const mapLeads = leads
-    .filter((l) => l.lat != null && l.lng != null)
+    .filter((l) => l.lat != null && l.lng != null && l.status !== "WON")
     .map((l) => ({
       id: l.id,
       name: l.name,
@@ -62,39 +65,52 @@ export default async function LeadsPage({
       type: "lead" as const,
     }));
 
-  const mapCustomers = customers
-    .filter((c) => c.lead?.lat != null && c.lead?.lng != null)
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      lat: c.lead!.lat!,
-      lng: c.lead!.lng!,
-      score: 100,
-      type: "customer" as const,
-    }));
+  const mapWon = wonLeads.map((l) => ({
+    id: l.id,
+    name: l.name,
+    lat: l.lat!,
+    lng: l.lng!,
+    score: 100,
+    type: "won" as const,
+  }));
 
   return (
     <div className="space-y-6 anim-lock">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <p className="label">Channel 03</p>
+          <p className="label">Channel 02</p>
           <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Leads</h1>
           <p className="text-sm text-[var(--text-dim)] mt-1">
             Search Flanders zones · map markers · {leads.length} in view
           </p>
         </div>
-        <Link href="/review" className="btn">
-          Open lead-bot review
+        <Link href="/" className="btn">
+          Go to work mode
         </Link>
       </div>
 
       <LeadSearchPanel zones={enabledZones} />
 
+      <div className="flex flex-wrap gap-2">
+        <Link href="/leads" className={`badge ${!sp.status ? "badge-live" : ""}`}>
+          all
+        </Link>
+        {LEAD_STATUSES.map((s2) => (
+          <Link
+            key={s2}
+            href={`/leads?status=${s2}`}
+            className={`badge ${sp.status === s2 ? "badge-live" : ""}`}
+          >
+            {s2.replaceAll("_", " ").toLowerCase()}
+          </Link>
+        ))}
+      </div>
+
       <section className="panel p-2 sm:p-3">
         <div className="label px-2 py-1 mb-2">
-          Territory map · {mapLeads.length + mapCustomers.length} markers
+          Territory map · {mapLeads.length + mapWon.length} markers
         </div>
-        <LeadsMap points={[...mapLeads, ...mapCustomers]} />
+        <LeadsMap points={[...mapLeads, ...mapWon]} />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -105,14 +121,15 @@ export default async function LeadsPage({
                 <th>Score</th>
                 <th>Lead</th>
                 <th>Zone</th>
+                <th>Phone</th>
                 <th>Status</th>
-                <th>Source</th>
+                <th>Triage</th>
               </tr>
             </thead>
             <tbody>
               {leads.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-[var(--text-dim)] text-sm py-6">
+                  <td colSpan={6} className="text-[var(--text-dim)] text-sm py-6">
                     No leads yet. Press Search for leads above to pull OpenStreetMap shops
                     into this list and onto the map.
                   </td>
@@ -128,13 +145,37 @@ export default async function LeadsPage({
                     >
                       {l.name}
                     </Link>
-                    <div className="text-xs text-[var(--text-dim)]">{l.reason}</div>
+                    <div className="text-xs text-[var(--text-dim)]">
+                      {l.city ? `${l.city} · ` : ""}{l.reason}
+                    </div>
+                    {l.hasVending && (
+                      <span className="badge badge-live mt-1">HAS VENDING</span>
+                    )}
                   </td>
                   <td className="text-sm">{l.province ?? "—"}</td>
+                  <td className="mono text-xs">
+                    {l.phone ? (
+                      <a href={`tel:${l.phone}`} className="text-[var(--accent)]">
+                        {l.phone}
+                      </a>
+                    ) : (
+                      <span className="text-[var(--text-mute)]">—</span>
+                    )}
+                  </td>
                   <td>
                     <span className="badge">{l.status}</span>
                   </td>
-                  <td className="mono text-xs">{l.source}</td>
+                  <td>
+                    <TriageButtons
+                      leadId={l.id}
+                      status={l.status}
+                      complianceStatus={l.complianceStatus}
+                      contactAction={contactLead}
+                      skipAction={skipLead}
+                      unskipAction={unskipLead}
+                      compact
+                    />
+                  </td>
                 </tr>
               ))}
             </tbody>

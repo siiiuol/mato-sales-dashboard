@@ -8,7 +8,7 @@ export type MapPoint = {
   lat: number;
   lng: number;
   score: number;
-  type: "lead" | "customer";
+  type: "lead" | "won";
 };
 
 const MapInner = dynamic(() => import("./LeadsMapInner"), {

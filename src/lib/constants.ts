@@ -1,31 +1,15 @@
-export const NAV_PRIMARY = [
-  { href: "/", label: "Command", code: "00" },
-  { href: "/work", label: "Work", code: "01" },
+export const NAV = [
+  { href: "/", label: "Work", code: "01" },
   { href: "/leads", label: "Leads", code: "02" },
-] as const;
-
-export const NAV_MORE = [
   { href: "/calls", label: "Calls", code: "03" },
-  { href: "/review", label: "Review", code: "04" },
-  { href: "/deals", label: "Deals", code: "05" },
-  { href: "/quotes", label: "Quotes", code: "06" },
-  { href: "/customers", label: "Customers", code: "07" },
-  { href: "/contacts", label: "Contacts", code: "14" },
-  { href: "/tasks", label: "Tasks", code: "13" },
-  { href: "/sourcing", label: "Sourcing", code: "11" },
-  { href: "/suppliers", label: "Suppliers", code: "12" },
-  { href: "/marketing", label: "Marketing", code: "15" },
-  { href: "/documents", label: "Documents", code: "16" },
-  { href: "/catalog", label: "Catalog", code: "08" },
-  { href: "/sales", label: "Reports", code: "09" },
-  { href: "/settings", label: "Settings", code: "10" },
 ] as const;
 
-/** Full admin nav keeps all channels visible. */
-export const NAV = [...NAV_PRIMARY, ...NAV_MORE] as const;
+export const NAV_ADMIN = [
+  { href: "/settings", label: "Settings", code: "04" },
+] as const;
 
 export const WORK_STEPS = [
-  { id: "review", code: "01", label: "Review" },
+  { id: "review", code: "01", label: "Triage" },
   { id: "call", code: "02", label: "Call" },
   { id: "log", code: "03", label: "Log" },
 ] as const;
@@ -64,6 +48,79 @@ export const ZONE_CENTERS: Record<string, { lat: number; lng: number; cities: st
     lng: 5.3378,
     cities: ["Hasselt", "Genk", "Tongeren", "Sint-Truiden"],
   },
+};
+
+/**
+ * Towns scanned per province, with coordinates.
+ *
+ * Overpass cannot reliably answer a province-sized query — those time out —
+ * but a town-sized box answers every time. Scanning town by town is also how
+ * the work is actually planned ("I'm doing Roeselare this week").
+ */
+export const ZONE_TOWNS: Record<string, Array<{ name: string; lat: number; lng: number }>> = {
+  "West-Vlaanderen": [
+    { name: "Brugge", lat: 51.2093, lng: 3.2247 },
+    { name: "Kortrijk", lat: 50.8279, lng: 3.2649 },
+    { name: "Oostende", lat: 51.2247, lng: 2.9125 },
+    { name: "Roeselare", lat: 50.9447, lng: 3.1338 },
+    { name: "Ieper", lat: 50.8514, lng: 2.8853 },
+    { name: "Waregem", lat: 50.8886, lng: 3.4271 },
+    { name: "Tielt", lat: 50.9994, lng: 3.3269 },
+    { name: "Torhout", lat: 51.0656, lng: 3.1006 },
+    { name: "Veurne", lat: 51.0722, lng: 2.6619 },
+    { name: "Knokke-Heist", lat: 51.3506, lng: 3.2769 },
+    { name: "Izegem", lat: 50.9153, lng: 3.2100 },
+    { name: "Menen", lat: 50.7994, lng: 3.1219 },
+    { name: "Diksmuide", lat: 51.0322, lng: 2.8639 },
+    { name: "Poperinge", lat: 50.8544, lng: 2.7256 },
+  ],
+  "Oost-Vlaanderen": [
+    { name: "Gent", lat: 51.0543, lng: 3.7174 },
+    { name: "Aalst", lat: 50.9378, lng: 4.0409 },
+    { name: "Sint-Niklaas", lat: 51.1650, lng: 4.1436 },
+    { name: "Dendermonde", lat: 51.0281, lng: 4.1014 },
+    { name: "Oudenaarde", lat: 50.8503, lng: 3.6017 },
+    { name: "Deinze", lat: 50.9803, lng: 3.5292 },
+    { name: "Eeklo", lat: 51.1867, lng: 3.5636 },
+    { name: "Lokeren", lat: 51.1036, lng: 3.9928 },
+    { name: "Ronse", lat: 50.7472, lng: 3.6008 },
+    { name: "Wetteren", lat: 51.0006, lng: 3.8797 },
+    { name: "Zottegem", lat: 50.8697, lng: 3.8100 },
+    { name: "Geraardsbergen", lat: 50.7728, lng: 3.8756 },
+    { name: "Beveren", lat: 51.2119, lng: 4.2569 },
+  ],
+  Antwerpen: [
+    { name: "Antwerpen", lat: 51.2194, lng: 4.4025 },
+    { name: "Mechelen", lat: 51.0259, lng: 4.4776 },
+    { name: "Turnhout", lat: 51.3225, lng: 4.9447 },
+    { name: "Lier", lat: 51.1319, lng: 4.5703 },
+    { name: "Geel", lat: 51.1650, lng: 4.9906 },
+    { name: "Herentals", lat: 51.1789, lng: 4.8319 },
+    { name: "Mol", lat: 51.1892, lng: 5.1156 },
+    { name: "Heist-op-den-Berg", lat: 51.0783, lng: 4.7256 },
+    { name: "Boom", lat: 51.0906, lng: 4.3703 },
+    { name: "Brasschaat", lat: 51.2917, lng: 4.4917 },
+  ],
+  "Vlaams-Brabant": [
+    { name: "Leuven", lat: 50.8798, lng: 4.7005 },
+    { name: "Vilvoorde", lat: 50.9281, lng: 4.4269 },
+    { name: "Tienen", lat: 50.8069, lng: 4.9381 },
+    { name: "Halle", lat: 50.7361, lng: 4.2372 },
+    { name: "Diest", lat: 50.9856, lng: 5.0508 },
+    { name: "Aarschot", lat: 50.9861, lng: 4.8353 },
+    { name: "Dilbeek", lat: 50.8631, lng: 4.2606 },
+    { name: "Asse", lat: 50.9114, lng: 4.1997 },
+  ],
+  Limburg: [
+    { name: "Hasselt", lat: 50.9307, lng: 5.3378 },
+    { name: "Genk", lat: 50.9650, lng: 5.5008 },
+    { name: "Tongeren", lat: 50.7806, lng: 5.4644 },
+    { name: "Sint-Truiden", lat: 50.8167, lng: 5.1861 },
+    { name: "Beringen", lat: 51.0489, lng: 5.2278 },
+    { name: "Lommel", lat: 51.2306, lng: 5.3125 },
+    { name: "Bilzen", lat: 50.8722, lng: 5.5194 },
+    { name: "Maasmechelen", lat: 50.9678, lng: 5.6939 },
+  ],
 };
 
 /** south, west, north, east — for free OpenStreetMap Overpass scans */

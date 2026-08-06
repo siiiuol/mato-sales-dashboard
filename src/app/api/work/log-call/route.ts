@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiError, audit, requireUser } from "@/lib/dal";
-import { sendLearningOutcomeSafely } from "@/lib/learning";
 import { callOutcomeSchema, formObject, idSchema } from "@/lib/validation";
 import type { LeadStatus } from "@/lib/types";
 import { z } from "zod";
@@ -28,9 +27,6 @@ export async function POST(request: Request) {
       select: {
         doNotContact: true,
         complianceStatus: true,
-        intelligenceEstablishmentId: true,
-        intelligenceEnterpriseId: true,
-        tier: true,
       },
     });
     if (!lead) {
@@ -57,7 +53,7 @@ export async function POST(request: Request) {
     }
     if (parsed.outcome === "WRONG_NUMBER") status = "DO_NOT_CONTACT";
 
-    const outreach = await prisma.outreachEvent.create({
+    await prisma.outreachEvent.create({
       data: {
         leadId: parsed.leadId,
         type: "CALL",
@@ -82,17 +78,6 @@ export async function POST(request: Request) {
       outcome: parsed.outcome,
     });
 
-    if (lead.intelligenceEstablishmentId) {
-      await sendLearningOutcomeSafely({
-        idempotency_key: `outreach:${outreach.id}`,
-        intelligence_establishment_id: lead.intelligenceEstablishmentId,
-        enterprise_number: lead.intelligenceEnterpriseId,
-        outcome_type: "outreach",
-        outcome_value: parsed.outcome.toLowerCase(),
-        occurred_at: outreach.createdAt.toISOString(),
-        cohort: lead.tier,
-      });
-    }
 
     revalidatePath("/");
     revalidatePath("/calls");

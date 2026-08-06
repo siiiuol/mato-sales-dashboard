@@ -26,7 +26,7 @@ export default function ErrorBoundary({
           Try again
         </button>
         <Link className="btn" href="/">
-          Back to Command Center
+          Back to work
         </Link>
       </div>
       {error.digest && (
