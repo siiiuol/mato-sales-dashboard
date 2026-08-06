@@ -13,6 +13,7 @@ export type LeadStatus =
   | "NEGOTIATION"
   | "WON"
   | "LOST"
+  | "SKIPPED"
   | "DO_NOT_CONTACT";
 
 export type DealStage =

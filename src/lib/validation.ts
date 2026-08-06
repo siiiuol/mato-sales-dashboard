@@ -10,6 +10,7 @@ export const leadStatusSchema = z.enum([
   "NEGOTIATION",
   "WON",
   "LOST",
+  "SKIPPED",
   "DO_NOT_CONTACT",
 ]);
 export const dealStageSchema = z.enum([

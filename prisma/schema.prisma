@@ -39,6 +39,8 @@ model Lead {
   discoveryQuestions          String?
   likelyObjection             String?
   outreachPrep                String?
+  hasVending                  Boolean   @default(false)
+  vendingDetail               String?
   status                      String    @default("NEW")
   nextActionAt                DateTime?
   lastTouchedAt               DateTime?

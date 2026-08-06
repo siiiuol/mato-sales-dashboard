@@ -91,6 +91,7 @@ export const LEAD_STATUSES = [
   "NEGOTIATION",
   "WON",
   "LOST",
+  "SKIPPED",
   "DO_NOT_CONTACT",
 ] as const;
 

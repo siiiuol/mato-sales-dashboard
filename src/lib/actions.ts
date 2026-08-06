@@ -157,6 +157,75 @@ export async function createLead(formData: FormData) {
   revalidatePath("/");
 }
 
+/**
+ * Triage: you decided this business is worth a call.
+ *
+ * Clearing compliance here is what actually makes a scanned lead callable —
+ * every call queue filters on `complianceStatus: "CLEARED"`, and the scan
+ * creates leads as PENDING.
+ */
+export async function contactLead(leadId: string) {
+  const user = await requireUser(["admin", "sales", "reviewer"]);
+  const id = idSchema.parse(leadId);
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    select: { doNotContact: true, complianceStatus: true },
+  });
+  if (!lead) throw new Error("Lead not found");
+  if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
+    throw new Error("Compliance block: this lead may not be contacted");
+  }
+
+  const now = new Date();
+  await prisma.lead.update({
+    where: { id },
+    data: {
+      complianceStatus: "CLEARED",
+      status: "TO_CALL",
+      nextActionAt: now,
+      suppressionCheckedAt: now,
+    },
+  });
+  await audit(user.id, "lead.contact_approved", "lead", id);
+  revalidatePath("/leads");
+  revalidatePath("/calls");
+  revalidatePath("/");
+}
+
+/** Triage: not now. Hidden from every queue but never deleted. */
+export async function skipLead(leadId: string) {
+  const user = await requireUser(["admin", "sales", "reviewer"]);
+  const id = idSchema.parse(leadId);
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    select: { status: true },
+  });
+  if (!lead) throw new Error("Lead not found");
+
+  await prisma.lead.update({
+    where: { id },
+    data: { status: "SKIPPED", nextActionAt: null, lastTouchedAt: new Date() },
+  });
+  // Store the previous status so a skip is restorable, not just reversible.
+  await audit(user.id, "lead.skipped", "lead", id, { previousStatus: lead.status });
+  revalidatePath("/leads");
+  revalidatePath("/calls");
+  revalidatePath("/");
+}
+
+export async function unskipLead(leadId: string) {
+  const user = await requireUser(["admin", "sales", "reviewer"]);
+  const id = idSchema.parse(leadId);
+  await prisma.lead.update({
+    where: { id },
+    data: { status: "TO_CALL", nextActionAt: new Date() },
+  });
+  await audit(user.id, "lead.unskipped", "lead", id);
+  revalidatePath("/leads");
+  revalidatePath("/calls");
+  revalidatePath("/");
+}
+
 export async function updateLeadStatus(leadId: string, status: LeadStatus) {
   const user = await requireUser(["admin", "sales"]);
   const id = idSchema.parse(leadId);
