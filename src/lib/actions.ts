@@ -188,12 +188,19 @@ export async function skipLead(leadId: string) {
   revalidatePath("/");
 }
 
+/**
+ * Undo a skip by putting the lead back in front of you to decide again.
+ *
+ * It returns to triage rather than straight to the call list: setting TO_CALL
+ * while compliance is still PENDING satisfies no queue's filter, so the lead
+ * would vanish from the app entirely.
+ */
 export async function unskipLead(leadId: string) {
   const user = await requireUser(["admin", "sales", "reviewer"]);
   const id = idSchema.parse(leadId);
   await prisma.lead.update({
     where: { id },
-    data: { status: "TO_CALL", nextActionAt: new Date() },
+    data: { status: "NEW", complianceStatus: "PENDING", nextActionAt: null },
   });
   await audit(user.id, "lead.unskipped", "lead", id);
   revalidatePath("/leads");
