@@ -224,7 +224,6 @@ export async function saveSettings(formData: FormData) {
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
-      accent: String(formData.get("accent") ?? "green"),
       pitchTemplates: String(formData.get("pitchTemplates") ?? "{}"),
     },
     create: {
@@ -234,7 +233,6 @@ export async function saveSettings(formData: FormData) {
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
-      accent: String(formData.get("accent") ?? "green"),
     },
   });
 

@@ -71,14 +71,14 @@ export default async function CallsPage({
       </div>
 
       <div>
-        <p className="label text-[var(--accent)]">02 Call</p>
-        <h1 className="display text-3xl font-semibold mt-1">Call stage</h1>
+        <p className="label">Call</p>
+        <h1 className="display text-3xl font-semibold mt-1">Today's calls</h1>
       </div>
 
       {current ? (
         <section className="panel p-5 sm:p-8 space-y-6">
           <div className="text-center space-y-2">
-            <p className="label">Target</p>
+            <p className="label">Calling</p>
             <h2 className="display text-3xl font-semibold">{current.name}</h2>
             <p className="text-sm text-[var(--text-dim)]">
               {[current.address, current.city, current.province].filter(Boolean).join(" · ")}
@@ -86,9 +86,9 @@ export default async function CallsPage({
           </div>
 
           {current.phone ? (
-            <a href={`tel:${current.phone}`} className="dial-orb block">
+            <a href={`tel:${current.phone}`} className="dial-orb">
               <div className="text-center px-4">
-                <div className="label text-[var(--accent)] mb-2">Dial</div>
+                <div className="label mb-2">Call</div>
                 <div className="display text-xl font-semibold">{current.phone}</div>
               </div>
             </a>
@@ -132,7 +132,7 @@ export default async function CallsPage({
               ).map((o) => (
                 <label
                   key={o.value}
-                  className="btn btn-ghost cursor-pointer has-[:checked]:border-[var(--accent)] has-[:checked]:text-[var(--accent)] has-[:checked]:bg-[rgba(61,255,154,0.08)]"
+                  className="btn btn-ghost cursor-pointer has-[:checked]:border-[var(--accent)] has-[:checked]:text-[var(--accent)] has-[:checked]:bg-[var(--gold-wash)]"
                 >
                   <input
                     type="radio"
@@ -161,14 +161,14 @@ export default async function CallsPage({
             </details>
             <input type="datetime-local" name="callbackAt" className="input" />
             <input name="note" className="input" placeholder="Optional note" />
-            <button type="submit" className="btn btn-primary btn-xl armed w-full">
-              Log and advance
+            <button type="submit" className="btn btn-primary btn-xl w-full">
+              Log and next
             </button>
           </form>
         </section>
       ) : (
         <section className="panel p-8 text-center text-[var(--text-dim)]">
-          No cleared calls. Approve leads in Work mode first.
+          Nothing cleared to call yet. Triage a few leads first.
         </section>
       )}
 

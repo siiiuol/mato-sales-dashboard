@@ -78,14 +78,14 @@ export default async function LeadsPage({
     <div className="space-y-6 anim-lock">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <p className="label">Channel 02</p>
+          <p className="label">Overview</p>
           <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Leads</h1>
           <p className="text-sm text-[var(--text-dim)] mt-1">
             Search Flanders zones · map markers · {leads.length} in view
           </p>
         </div>
         <Link href="/" className="btn">
-          Go to work mode
+          Go to Work
         </Link>
       </div>
 
@@ -108,7 +108,7 @@ export default async function LeadsPage({
 
       <section className="panel p-2 sm:p-3">
         <div className="label px-2 py-1 mb-2">
-          Territory map · {mapLeads.length + mapWon.length} markers
+          Map · {mapLeads.length + mapWon.length} locations
         </div>
         <LeadsMap points={[...mapLeads, ...mapWon]} />
       </section>
@@ -149,7 +149,7 @@ export default async function LeadsPage({
                       {l.city ? `${l.city} · ` : ""}{l.reason}
                     </div>
                     {l.hasVending && (
-                      <span className="badge badge-live mt-1">HAS VENDING</span>
+                      <span className="badge badge-live mt-1">Has vending</span>
                     )}
                   </td>
                   <td className="text-sm">{l.province ?? "—"}</td>

@@ -1,17 +1,16 @@
 export const NAV = [
-  { href: "/", label: "Work", code: "01" },
-  { href: "/leads", label: "Leads", code: "02" },
-  { href: "/calls", label: "Calls", code: "03" },
+  { href: "/", label: "Work" },
+  { href: "/leads", label: "Leads" },
+  { href: "/calls", label: "Calls" },
 ] as const;
 
-export const NAV_ADMIN = [
-  { href: "/settings", label: "Settings", code: "04" },
-] as const;
+export const NAV_ADMIN = [{ href: "/settings", label: "Settings" }] as const;
 
+/** Triage → Call → Log is genuinely ordered, so the steps stay numbered. */
 export const WORK_STEPS = [
-  { id: "review", code: "01", label: "Triage" },
-  { id: "call", code: "02", label: "Call" },
-  { id: "log", code: "03", label: "Log" },
+  { id: "review", code: "1", label: "Triage" },
+  { id: "call", code: "2", label: "Call" },
+  { id: "log", code: "3", label: "Log" },
 ] as const;
 
 export const FLANDERS_ZONES = [

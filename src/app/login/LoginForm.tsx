@@ -30,7 +30,7 @@ export function LoginForm() {
         <p className="text-sm text-[var(--danger)]" role="alert">{state.error}</p>
       )}
       <button className="btn btn-primary w-full" disabled={pending}>
-        {pending ? "Authenticating…" : "Enter sales OS"}
+        {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>
   );

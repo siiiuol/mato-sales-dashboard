@@ -55,7 +55,7 @@ export default async function LeadDetailPage({
           <div className="score text-3xl">{lead.score}</div>
           <div>
             <span className="badge">{lead.status}</span>
-            {lead.hasVending && <span className="badge badge-live ml-2">HAS VENDING</span>}
+            {lead.hasVending && <span className="badge badge-live ml-2">Has vending</span>}
           </div>
           <TriageButtons
             leadId={lead.id}
@@ -70,7 +70,7 @@ export default async function LeadDetailPage({
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="panel p-4 lg:col-span-2 space-y-4">
-          <h2 className="label text-[var(--accent)]">Intelligence & outreach</h2>
+          <h2 className="label text-[var(--accent)]">Company & outreach</h2>
           <Info label="Enterprise / establishment" value={[lead.intelligenceEnterpriseId, lead.intelligenceEstablishmentId].filter(Boolean).join(" / ")} />
           <Info label="Recommended machine" value={lead.recommendedMachine} />
           <Info label="Contact angle" value={lead.recommendedAngle} />
@@ -82,7 +82,7 @@ export default async function LeadDetailPage({
         </section>
 
         <section className="panel p-4 space-y-3">
-          <h2 className="label text-[var(--accent)]">Compliance gate</h2>
+          <h2 className="label text-[var(--accent)]">Contact permission</h2>
           <p className="text-sm">
             <span className="badge">{lead.complianceStatus}</span>
             {lead.doNotContact && <span className="badge ml-2">DNC</span>}
@@ -96,7 +96,7 @@ export default async function LeadDetailPage({
               <option value="BLOCKED">Blocked / DNC</option>
             </select>
             <input name="suppressionReason" className="input" placeholder="Reason when blocked" />
-            <button className="btn btn-primary w-full">Apply gate</button>
+            <button className="btn btn-primary w-full">Save</button>
           </form>
         </section>
       </div>

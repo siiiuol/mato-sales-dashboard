@@ -85,7 +85,7 @@ export function LeadSearchPanel({
         </label>
         <button
           type="button"
-          className={`btn btn-primary sm:min-w-[200px] ${pending ? "anim-scan" : ""}`}
+          className="btn btn-primary sm:min-w-[200px]"
           disabled={pending || !zone}
           onClick={runSearch}
         >

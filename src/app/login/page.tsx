@@ -11,10 +11,10 @@ export default async function LoginPage() {
     <div className="min-h-screen grid place-items-center px-4 py-10 anim-lock">
       <section className="w-full max-w-md space-y-8">
         <div className="text-center space-y-3">
-          <div className="shell-brand mx-auto">MATO</div>
-          <p className="label anim-scan">Mission control access</p>
+          <div className="shell-brand shell-brand-lg mx-auto">MATO</div>
+          <p className="label">Sign in</p>
           <p className="text-sm text-[var(--text-dim)] max-w-sm mx-auto">
-            Authenticate to enter the Review → Call → Log work loop.
+            Sign in to pick up Triage → Call → Log.
           </p>
         </div>
         <div className="panel p-6">

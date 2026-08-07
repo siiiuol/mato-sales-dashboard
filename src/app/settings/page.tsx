@@ -26,7 +26,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 anim-lock max-w-3xl">
       <div>
-        <p className="label">Channel 04</p>
+        <p className="label">Admin</p>
         <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Settings</h1>
         <p className="text-sm text-[var(--text-dim)] mt-1">
           EUR · Europe/Brussels · lead discovery runs on free OpenStreetMap data
@@ -80,14 +80,6 @@ export default async function SettingsPage() {
           <p className="text-xs text-[var(--text-dim)] mt-1">
             Only needed if you want paid Google coverage. Scans work without it.
           </p>
-        </div>
-
-        <div>
-          <label className="label block mb-1">Accent</label>
-          <select name="accent" className="select" defaultValue={settings.accent}>
-            <option value="green">Green terminal</option>
-            <option value="cyan">Cyan ops</option>
-          </select>
         </div>
 
         <div>

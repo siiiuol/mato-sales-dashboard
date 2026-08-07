@@ -10,11 +10,9 @@ type Role = "admin" | "sales" | "reviewer";
 
 export function Shell({
   children,
-  accent = "green",
   role,
 }: {
   children: React.ReactNode;
-  accent?: string;
   role?: Role | null;
 }) {
   const pathname = usePathname();
@@ -44,24 +42,24 @@ export function Shell({
 
   if (pathname === "/login") {
     return (
-      <main data-accent={accent} className="min-h-full">
+      <main className="min-h-full">
         {children}
       </main>
     );
   }
 
   return (
-    <div data-accent={accent} className="min-h-full flex flex-col">
-      <header className="border-b border-[var(--border)] bg-[rgba(3,5,7,0.88)] backdrop-blur-md sticky top-0 z-40">
+    <div className="min-h-full flex flex-col">
+      <header className="app-header">
         <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-5 shrink-0">
             <Link href="/" className="shell-brand">
               MATO
             </Link>
             <div className="hidden sm:flex flex-col gap-0.5">
-              <span className="label anim-scan">Mission control</span>
+              <span className="label">Sales workspace</span>
               <span className="mono text-[0.65rem] text-[var(--text-mute)] tracking-[0.14em]">
-                {clock || "--:--:--"} · BE-VLG
+                {clock || "--:--:--"} · Vlaanderen
               </span>
             </div>
           </div>
@@ -74,13 +72,12 @@ export function Shell({
                 className="nav-link"
                 data-active={isActive(item.href)}
               >
-                <span className="text-[var(--text-mute)]">{item.code}</span>
                 {item.label}
               </Link>
             ))}
             <form action={logout}>
               <button className="nav-link" type="submit">
-                Exit
+                Sign out
               </button>
             </form>
           </nav>
@@ -89,8 +86,7 @@ export function Shell({
       <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-6">{children}</main>
       <footer className="border-t border-[var(--border)] py-3 px-4">
         <div className="mx-auto max-w-7xl flex justify-between gap-3 label">
-          <span>MATO sales OS · Flanders</span>
-          <span className="text-[var(--accent)]">signal active</span>
+          <span>MATO · Vlaanderen</span>
         </div>
       </footer>
     </div>

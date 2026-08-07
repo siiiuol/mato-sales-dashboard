@@ -164,30 +164,30 @@ export function WorkMode({
   return (
     <div className="work-stage space-y-5 anim-lock">
       {showBriefing && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(3,5,7,0.88)] backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(10,8,6,0.55)] backdrop-blur-sm p-4">
           <section className="panel p-6 sm:p-8 max-w-lg w-full space-y-5">
-            <p className="label text-[var(--accent)]">Mission briefing</p>
+            <p className="label">How this works</p>
             <h2 className="display text-3xl font-semibold">Triage → Call → Log</h2>
             <ol className="space-y-3 text-sm text-[var(--text-dim)]">
               <li>
-                <strong className="text-[var(--text)]">01 Triage</strong> — Contact
+                <strong className="text-[var(--text)]">Triage</strong> — Contact
                 or skip the next business.
               </li>
               <li>
-                <strong className="text-[var(--text)]">02 Call</strong> — Dial with
+                <strong className="text-[var(--text)]">Call</strong> — Dial with
                 the script on screen.
               </li>
               <li>
-                <strong className="text-[var(--text)]">03 Log</strong> — Record the
+                <strong className="text-[var(--text)]">Log</strong> — Record the
                 result. The next lead loads automatically.
               </li>
             </ol>
             <button
               type="button"
-              className="btn btn-primary w-full armed"
+              className="btn btn-primary w-full"
               onClick={dismissBriefing}
             >
-              Begin work
+              Start
             </button>
           </section>
         </div>
@@ -203,16 +203,16 @@ export function WorkMode({
         <span>
           Calls logged today <strong>{clearedToday}</strong>
         </span>
-        <span className="ml-auto text-[var(--text-mute)]">You decide every call</span>
+        <span className="ml-auto text-[var(--text-mute)]">You choose who to call</span>
       </div>
 
       <div>
-        <p className="label text-[var(--accent)]">Work mode</p>
+        <p className="label">Work</p>
         <h1 className="display text-3xl sm:text-4xl font-semibold mt-1">
-          One lead. One job.
+          One lead at a time.
         </h1>
         <p className="text-[var(--text-dim)] mt-2 max-w-xl">
-          Follow the active step. Everything else is secondary.
+          Work through the active step. The rest can wait.
         </p>
       </div>
 
@@ -229,7 +229,8 @@ export function WorkMode({
             }
             onClick={() => setStep(item.id as Step)}
           >
-            {item.code} {item.label}
+            <span className="step-rail-num">{item.code}</span>
+            {item.label}
           </button>
         ))}
       </div>
@@ -268,7 +269,7 @@ export function WorkMode({
                   <div>{currentTriage.category ?? "Local"}</div>
                   <div className="score text-base">{currentTriage.score}</div>
                   {currentTriage.hasVending && (
-                    <div className="badge badge-live">HAS VENDING</div>
+                    <div className="badge badge-live">Has vending</div>
                   )}
                   {!currentTriage.phone && (
                     <div className="text-[var(--warn)]">no phone</div>
@@ -308,7 +309,7 @@ export function WorkMode({
               <div className="flex flex-wrap gap-2 pt-2">
                 <button
                   type="button"
-                  className="btn btn-primary btn-xl armed"
+                  className="btn btn-primary btn-xl"
                   disabled={pending}
                   onClick={() => decide("contact")}
                 >
@@ -350,14 +351,14 @@ export function WorkMode({
                   {[currentCall.address, currentCall.city].filter(Boolean).join(" · ")}
                 </p>
                 {currentCall.hasVending && (
-                  <span className="badge badge-live">HAS VENDING</span>
+                  <span className="badge badge-live">Has vending</span>
                 )}
               </div>
 
               {currentCall.phone ? (
-                <a href={`tel:${currentCall.phone}`} className="dial-orb block">
+                <a href={`tel:${currentCall.phone}`} className="dial-orb">
                   <div className="text-center px-4">
-                    <div className="label text-[var(--accent)] mb-2">Dial</div>
+                    <div className="label mb-2">Call</div>
                     <div className="display text-xl font-semibold">
                       {currentCall.phone}
                     </div>
@@ -365,7 +366,7 @@ export function WorkMode({
                 </a>
               ) : (
                 <div className="dial-orb opacity-50">
-                  <span className="label">No phone on file</span>
+                  <span className="label">No phone number</span>
                 </div>
               )}
 
@@ -392,7 +393,7 @@ export function WorkMode({
               <div className="flex flex-wrap justify-center gap-2">
                 <button
                   type="button"
-                  className="btn btn-primary btn-xl armed"
+                  className="btn btn-primary btn-xl"
                   onClick={() => setStep("log")}
                 >
                   Log result
@@ -442,7 +443,7 @@ export function WorkMode({
                 setOutcome("NO_ANSWER");
                 setNote("");
                 setCallbackAt("");
-                setMessage("Logged · next");
+                setMessage("Saved");
                 const next = await refreshCallQueue();
                 if (next?.length) setStep("call");
                 else if (triageQueue.length) setStep("review");
@@ -511,10 +512,10 @@ export function WorkMode({
             />
             <button
               type="submit"
-              className="btn btn-primary btn-xl w-full armed"
+              className="btn btn-primary btn-xl w-full"
               disabled={pending}
             >
-              Save and advance
+              Save and next
             </button>
           </form>
         </section>

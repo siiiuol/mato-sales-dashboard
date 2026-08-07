@@ -32,7 +32,7 @@ export default function LeadsMapInner({ points }: { points: MapPoint[] }) {
     <div className="relative">
       {!points.length && (
         <div className="absolute inset-x-0 top-0 z-[500] pointer-events-none p-3">
-          <p className="mono text-xs text-[var(--text-dim)] bg-[rgba(8,12,16,0.72)] border border-[var(--border)] px-3 py-2 inline-block">
+          <p className="mono text-xs text-[var(--text-dim)] bg-[var(--surface)] shadow-[var(--shadow-sm)] border border-[var(--border)] px-3 py-2 inline-block">
             No leads on the map yet — use Search for leads above
           </p>
         </div>
@@ -40,12 +40,12 @@ export default function LeadsMapInner({ points }: { points: MapPoint[] }) {
       <MapContainer
         center={center}
         zoom={8}
-        className="h-[320px] w-full rounded-[2px] z-0"
+        className="h-[320px] w-full rounded-none z-0"
         scrollWheelZoom={false}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
         <FitBounds points={points} />
         {points.map((p) => (
@@ -54,10 +54,13 @@ export default function LeadsMapInner({ points }: { points: MapPoint[] }) {
             center={[p.lat, p.lng]}
             radius={p.type === "won" ? 8 : 6}
             pathOptions={{
-              color: p.type === "won" ? "#3de7ff" : "#39ff8a",
-              fillColor: p.type === "won" ? "#3de7ff" : "#39ff8a",
-              fillOpacity: 0.7,
-              weight: 1,
+              // A white ring separates each dot from the map underneath.
+              // Gold = still to work, deep green = won. Literals rather than
+              // tokens because Leaflet writes these straight into SVG.
+              color: "#ffffff",
+              fillColor: p.type === "won" ? "#1f6b45" : "#a97a1f",
+              fillOpacity: 0.9,
+              weight: 1.5,
             }}
           >
             <Popup>

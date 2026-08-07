@@ -27,7 +27,7 @@ export function TriageButtons({
   compact?: boolean;
 }) {
   const [pending, start] = useTransition();
-  const size = compact ? "btn py-1 min-h-0 text-xs" : "btn";
+  const size = compact ? "btn btn-sm" : "btn";
 
   const run = (fn: (id: string) => Promise<void>) => () => {
     start(async () => {

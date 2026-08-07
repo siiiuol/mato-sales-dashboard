@@ -17,7 +17,7 @@ export default function ErrorBoundary({
   return (
     <div className="panel p-6 max-w-2xl mx-auto space-y-4 anim-lock">
       <div>
-        <p className="label text-[var(--warn)]">Action refused</p>
+        <p className="label text-[var(--warn)]">Not saved</p>
         <h1 className="display text-2xl font-semibold mt-1">That didn&apos;t go through</h1>
       </div>
       <p className="text-sm whitespace-pre-wrap">{error.message}</p>
