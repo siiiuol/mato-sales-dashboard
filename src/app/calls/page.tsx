@@ -25,6 +25,8 @@ export default async function CallsPage({
       complianceStatus: "CLEARED",
     },
     orderBy: [
+      // Zaken met een automaat eerst — bewezen kopers, zoals in Werk.
+      { hasVending: "desc" },
       { score: "desc" },
       { timingScore: "desc" },
       { distanceKm: "asc" },

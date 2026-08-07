@@ -25,7 +25,14 @@ export default async function LeadsPage({
   const [leads, wonLeads, runs, settings] = await Promise.all([
     prisma.lead.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }],
+      // Op ranking, net als de bel- en selecteerwachtrij. Met een limiet van
+      // 200 op ruim duizend leads bepaalt deze volgorde wélke je te zien
+      // krijgt: de beste, niet toevallig de laatst gevondene.
+      orderBy: [
+        { hasVending: "desc" },
+        { score: "desc" },
+        { createdAt: "desc" },
+      ],
       take: 200,
     }),
     prisma.lead.findMany({
