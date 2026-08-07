@@ -15,7 +15,7 @@ const MapInner = dynamic(() => import("./LeadsMapInner"), {
   ssr: false,
   loading: () => (
     <div className="h-[320px] flex items-center justify-center text-[var(--text-dim)] mono text-sm">
-      Loading map…
+      Kaart laden…
     </div>
   ),
 });

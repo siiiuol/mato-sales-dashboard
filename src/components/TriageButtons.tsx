@@ -43,7 +43,7 @@ export function TriageButtons({
         disabled={pending}
         onClick={run(unskipAction)}
       >
-        Unskip
+        Terugzetten
       </button>
     );
   }
@@ -59,7 +59,7 @@ export function TriageButtons({
           disabled={pending}
           onClick={run(contactAction)}
         >
-          Contact
+          Bellen
         </button>
       )}
       <button
@@ -68,7 +68,7 @@ export function TriageButtons({
         disabled={pending}
         onClick={run(skipAction)}
       >
-        Skip
+        Overslaan
       </button>
     </div>
   );

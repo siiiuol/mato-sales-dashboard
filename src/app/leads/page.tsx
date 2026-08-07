@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { contactLead, createLead, skipLead, unskipLead } from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
-import { LEAD_STATUSES } from "@/lib/constants";
+import { LEAD_STATUSES, statusLabel } from "@/lib/constants";
 import { FLANDERS_ZONES } from "@/lib/constants";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
@@ -78,14 +78,14 @@ export default async function LeadsPage({
     <div className="space-y-6 anim-lock">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <p className="label">Overview</p>
+          <p className="label">Overzicht</p>
           <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Leads</h1>
           <p className="text-sm text-[var(--text-dim)] mt-1">
-            Search Flanders zones · map markers · {leads.length} in view
+            Zoek per zone in Vlaanderen · {leads.length} in beeld
           </p>
         </div>
         <Link href="/" className="btn">
-          Go to Work
+          Naar Werk
         </Link>
       </div>
 
@@ -93,7 +93,7 @@ export default async function LeadsPage({
 
       <div className="flex flex-wrap gap-2">
         <Link href="/leads" className={`badge ${!sp.status ? "badge-live" : ""}`}>
-          all
+          alles
         </Link>
         {LEAD_STATUSES.map((s2) => (
           <Link
@@ -101,14 +101,14 @@ export default async function LeadsPage({
             href={`/leads?status=${s2}`}
             className={`badge ${sp.status === s2 ? "badge-live" : ""}`}
           >
-            {s2.replaceAll("_", " ").toLowerCase()}
+            {statusLabel(s2)}
           </Link>
         ))}
       </div>
 
       <section className="panel p-2 sm:p-3">
         <div className="label px-2 py-1 mb-2">
-          Map · {mapLeads.length + mapWon.length} locations
+          Kaart · {mapLeads.length + mapWon.length} locaties
         </div>
         <LeadsMap points={[...mapLeads, ...mapWon]} />
       </section>
@@ -121,17 +121,17 @@ export default async function LeadsPage({
                 <th>Score</th>
                 <th>Lead</th>
                 <th>Zone</th>
-                <th>Phone</th>
+                <th>Telefoon</th>
                 <th>Status</th>
-                <th>Triage</th>
+                <th>Actie</th>
               </tr>
             </thead>
             <tbody>
               {leads.length === 0 && (
                 <tr>
                   <td colSpan={6} className="text-[var(--text-dim)] text-sm py-6">
-                    No leads yet. Press Search for leads above to pull OpenStreetMap shops
-                    into this list and onto the map.
+                    Nog geen leads. Klik hierboven op Leads zoeken om zaken in deze lijst
+                    en op de kaart te krijgen.
                   </td>
                 </tr>
               )}
@@ -149,7 +149,7 @@ export default async function LeadsPage({
                       {l.city ? `${l.city} · ` : ""}{l.reason}
                     </div>
                     {l.hasVending && (
-                      <span className="badge badge-live mt-1">Has vending</span>
+                      <span className="badge badge-live mt-1">Heeft automaat</span>
                     )}
                   </td>
                   <td className="text-sm">{l.province ?? "—"}</td>
@@ -163,7 +163,7 @@ export default async function LeadsPage({
                     )}
                   </td>
                   <td>
-                    <span className="badge">{l.status}</span>
+                    <span className="badge">{statusLabel(l.status)}</span>
                   </td>
                   <td>
                     <TriageButtons
@@ -184,31 +184,31 @@ export default async function LeadsPage({
 
         <div className="space-y-4">
           <section className="panel p-4">
-            <h2 className="label text-[var(--accent)] mb-3">Manual lead</h2>
+            <h2 className="label text-[var(--accent)] mb-3">Lead toevoegen</h2>
             <form action={createLead} className="space-y-2">
-              <input name="name" className="input" placeholder="Company name" required />
-              <input name="phone" className="input" placeholder="Phone" />
-              <input name="city" className="input" placeholder="City" />
+              <input name="name" className="input" placeholder="Bedrijfsnaam" required />
+              <input name="phone" className="input" placeholder="Telefoon" />
+              <input name="city" className="input" placeholder="Gemeente" />
               <select name="province" className="select" defaultValue="">
-                <option value="">Province</option>
+                <option value="">Provincie</option>
                 {FLANDERS_ZONES.map((z) => (
                   <option key={z} value={z}>
                     {z}
                   </option>
                 ))}
               </select>
-              <input name="category" className="input" placeholder="Category" />
+              <input name="category" className="input" placeholder="Categorie" />
               <button type="submit" className="btn btn-primary w-full">
-                Add lead
+                Lead toevoegen
               </button>
             </form>
           </section>
 
           <section className="panel p-4">
-            <h2 className="label text-[var(--accent)] mb-3">Detection runs</h2>
+            <h2 className="label text-[var(--accent)] mb-3">Recente zoekopdrachten</h2>
             <ul className="space-y-2 text-sm">
               {runs.length === 0 && (
-                <li className="text-[var(--text-dim)]">No scans yet.</li>
+                <li className="text-[var(--text-dim)]">Nog niet gezocht.</li>
               )}
               {runs.map((r) => (
                 <li key={r.id} className="border-b border-[var(--border)] pb-2">
@@ -217,7 +217,7 @@ export default async function LeadsPage({
                     <span className="badge badge-live">{r.status}</span>
                   </div>
                   <div className="text-[var(--text-dim)] text-xs mt-1">
-                    +{r.createdCount} / skip {r.skippedCount}
+                    +{r.createdCount} nieuw / {r.skippedCount} al bekend
                     {r.detail ? ` · ${r.detail}` : ""}
                   </div>
                 </li>

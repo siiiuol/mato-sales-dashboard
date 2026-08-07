@@ -33,7 +33,7 @@ export default function LeadsMapInner({ points }: { points: MapPoint[] }) {
       {!points.length && (
         <div className="absolute inset-x-0 top-0 z-[500] pointer-events-none p-3">
           <p className="mono text-xs text-[var(--text-dim)] bg-[var(--surface)] shadow-[var(--shadow-sm)] border border-[var(--border)] px-3 py-2 inline-block">
-            No leads on the map yet — use Search for leads above
+            Nog geen leads op de kaart — klik hierboven op Leads zoeken
           </p>
         </div>
       )}

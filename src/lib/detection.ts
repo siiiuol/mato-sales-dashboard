@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
-import { ZONE_TOWNS } from "./constants";
-import { scanZoneCandidates, vendingMachines, type OsmCandidate } from "./osm";
+import { categoryLabel, ZONE_TOWNS } from "./constants";
+import { scanZoneCandidates, vendingLabel, vendingMachines, type OsmCandidate } from "./osm";
 
 const CATEGORY_WEIGHT: Record<string, number> = {
   bakery: 34,
@@ -67,10 +67,10 @@ export function scoreLead(input: {
   const vendingBonus = input.hasVending ? 20 : 0;
   const score = Math.min(99, base + phoneBonus + sizeBonus + vendingBonus + 10);
   const bits = [
-    input.category.charAt(0).toUpperCase() + input.category.slice(1),
-    input.hasVending ? "already has vending" : null,
-    input.phone ? "phone available" : "no phone",
-    sizeBonus > 0 ? "size proxy" : null,
+    categoryLabel(input.category),
+    input.hasVending ? "heeft al een automaat" : null,
+    input.phone ? "telefoon bekend" : "geen telefoon",
+    sizeBonus > 0 ? "grotere zaak" : null,
   ].filter(Boolean);
   return { score, reason: bits.join(" · ") };
 }
@@ -230,14 +230,14 @@ async function placesCandidates(
       // A misconfigured key must never look like "this province has no bakeries".
       if (res.status === 401 || res.status === 403) {
         throw new PlacesConfigError(
-          `Google Places rejected the key (${body.error?.status ?? res.status}). ` +
-            `Enable "Places API (New)" for this project in Google Cloud Console, ` +
-            `make sure billing is on, and check the key's API restrictions. ` +
-            `Clear the key in Settings to go back to free OpenStreetMap search.`
+          `Google Places weigert de sleutel (${body.error?.status ?? res.status}). ` +
+            `Schakel "Places API (New)" in voor dit project in Google Cloud Console, ` +
+            `zet facturatie aan en controleer de API-beperkingen van de sleutel. ` +
+            `Maak het sleutelveld leeg bij Instellingen om terug te vallen op gratis OpenStreetMap.`
         );
       }
       throw new PlacesConfigError(
-        `Google Places request failed (${res.status}): ${body.error?.message ?? "unknown error"}`
+        `Google Places-aanvraag mislukt (${res.status}): ${body.error?.message ?? "onbekende fout"}`
       );
     }
 
@@ -306,9 +306,7 @@ async function flagVendingFromOsm(zone: string, candidates: OsmCandidate[]) {
       const near = machines.find((m) => haversineKm(c, m) <= 0.05);
       if (near) {
         c.hasVending = true;
-        c.vendingDetail = near.operator
-          ? `${(near.vending ?? "vending").replaceAll("_", " ")} machine on site (operator: ${near.operator})`
-          : `${(near.vending ?? "vending").replaceAll("_", " ")} machine on site`;
+        c.vendingDetail = vendingLabel(near.vending, near.operator);
       }
     }
   } catch {
@@ -369,26 +367,26 @@ export async function runDetection(
           settings.placesApiKey.trim()
         );
         usedGoogle = true;
-        coverage = `Google Places · ${ZONE_TOWNS[zone]?.length ?? 0} towns`;
+        coverage = `Google Places · ${ZONE_TOWNS[zone]?.length ?? 0} gemeenten`;
       } catch (err) {
         // A broken key must not mean "no leads today" — fall back to the free
         // source and say plainly why.
-        placesProblem = err instanceof Error ? err.message : "Google Places failed";
+        placesProblem = err instanceof Error ? err.message : "Google Places is mislukt";
       }
     }
 
     if (!usedGoogle) {
       const scan = await scanZoneCandidates(zone, categories);
       candidates = scan.candidates;
-      coverage = `${scan.townsOk}/${scan.townsTotal} towns covered`;
+      coverage = `${scan.townsOk} van ${scan.townsTotal} gemeenten doorzocht`;
       if (scan.townsFailed.length) {
         // OpenStreetMap's public servers throttle, so a scan often covers only
         // part of a province. Scanning again fills the gaps — results dedupe.
-        coverage += ` · OpenStreetMap was busy for ${scan.townsFailed.join(", ")} — scan again to cover them`;
+        coverage += ` · OpenStreetMap was bezet voor ${scan.townsFailed.join(", ")} — zoek opnieuw om die mee te nemen`;
       }
     }
     if (placesProblem) {
-      coverage = `${placesProblem} — searched OpenStreetMap instead · ${coverage}`;
+      coverage = `${placesProblem} — in plaats daarvan OpenStreetMap doorzocht · ${coverage}`;
     }
     const source = usedGoogle ? "places" : "openstreetmap";
 

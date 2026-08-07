@@ -23,7 +23,7 @@ export async function login(
     email: formData.get("email"),
     password: formData.get("password"),
   });
-  if (!parsed.success) return { error: "Enter a valid email and password." };
+  if (!parsed.success) return { error: "Vul een geldig e-mailadres en wachtwoord in." };
 
   const user = await prisma.user.findUnique({ where: { email: parsed.data.email } });
   const valid = user?.active
@@ -31,7 +31,7 @@ export async function login(
     : false;
   if (!user || !valid || !["admin", "sales", "reviewer"].includes(user.role)) {
     await new Promise((resolve) => setTimeout(resolve, 350));
-    return { error: "Invalid credentials." };
+    return { error: "Onjuist e-mailadres of wachtwoord." };
   }
 
   await createSession({ userId: user.id, role: user.role as AppRole });

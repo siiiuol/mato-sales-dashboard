@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState, useTransition } from "react";
-import { WORK_STEPS } from "@/lib/constants";
+import { CALL_OUTCOMES, categoryLabel, WORK_STEPS } from "@/lib/constants";
 import { contactLead, skipLead } from "@/lib/actions";
 
 type Step = "review" | "call" | "log";
@@ -28,17 +28,10 @@ export type WorkLead = {
   evidenceSummary: string | null;
 };
 
-const PRIMARY_OUTCOMES = [
-  { value: "NO_ANSWER", label: "No answer" },
-  { value: "CALLBACK", label: "Callback" },
-  { value: "INTERESTED", label: "Interested" },
-  { value: "NOT_INTERESTED", label: "Not interested" },
-] as const;
-
-const MORE_OUTCOMES = [
-  { value: "VOICEMAIL", label: "Voicemail" },
-  { value: "WRONG_NUMBER", label: "Wrong number" },
-] as const;
+/** Eén bron voor de belresultaten, gedeeld met de losse Bellen-pagina. */
+const PRIMARY_VALUES = ["NO_ANSWER", "CALLBACK", "INTERESTED", "NOT_INTERESTED"];
+const PRIMARY_OUTCOMES = CALL_OUTCOMES.filter((o) => PRIMARY_VALUES.includes(o.value));
+const MORE_OUTCOMES = CALL_OUTCOMES.filter((o) => !PRIMARY_VALUES.includes(o.value));
 
 const BRIEFING_KEY = "mato-work-briefing-seen";
 
@@ -101,15 +94,15 @@ export function WorkMode({
           await skipLead(lead.id);
         }
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : "Could not save that");
+        setMessage(err instanceof Error ? err.message : "Opslaan is niet gelukt");
         return;
       }
       setTriageQueue((prev) => prev.filter((l) => l.id !== lead.id));
       if (choice === "contact") {
-        setMessage(`${lead.name} added to the call list`);
+        setMessage(`${lead.name} staat op de bellijst`);
         await refreshCallQueue();
       } else {
-        setMessage(`${lead.name} skipped · find it again under Leads`);
+        setMessage(`${lead.name} overgeslagen · terug te vinden bij Leads`);
       }
     });
   };
@@ -122,11 +115,11 @@ export function WorkMode({
       try {
         await skipLead(lead.id);
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : "Could not skip");
+        setMessage(err instanceof Error ? err.message : "Overslaan is niet gelukt");
         return;
       }
       setCallQueue((prev) => prev.filter((l) => l.id !== lead.id));
-      setMessage(`${lead.name} skipped`);
+      setMessage(`${lead.name} overgeslagen`);
     });
   };
 
@@ -145,7 +138,7 @@ export function WorkMode({
   const why =
     card?.evidenceSummary ||
     card?.reason ||
-    "Local food business — a fit for unattended sales.";
+    "Lokale voedingszaak — geschikt voor onbemande verkoop.";
 
   const opener =
     card?.phoneOpener ||
@@ -154,32 +147,32 @@ export function WorkMode({
   const angle =
     card?.recommendedAngle ||
     (card?.hasVending
-      ? "They already run a machine — ask what works, what does not, and whether a second one or a replacement makes sense."
-      : "Extend product availability without a second staffed outlet.");
+      ? "Ze hebben al een automaat — vraag wat werkt, wat niet, en of een tweede of een vervanging zinvol is."
+      : "Producten langer beschikbaar zonder extra bemand punt.");
 
-  const machine = card?.recommendedMachine || "Match the machine on the call";
+  const machine = card?.recommendedMachine || "Bepaal de automaat tijdens het gesprek";
 
-  const objection = card?.likelyObjection || "Te duur / geen ruimte";
+  const objection = card?.likelyObjection || "Te duur / geen plaats";
 
   return (
     <div className="work-stage space-y-5 anim-lock">
       {showBriefing && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[rgba(10,8,6,0.55)] backdrop-blur-sm p-4">
           <section className="panel p-6 sm:p-8 max-w-lg w-full space-y-5">
-            <p className="label">How this works</p>
-            <h2 className="display text-3xl font-semibold">Triage → Call → Log</h2>
+            <p className="label">Zo werkt het</p>
+            <h2 className="display text-3xl font-semibold">Selecteren → Bellen → Noteren</h2>
             <ol className="space-y-3 text-sm text-[var(--text-dim)]">
               <li>
-                <strong className="text-[var(--text)]">Triage</strong> — Contact
-                or skip the next business.
+                <strong className="text-[var(--text)]">Selecteren</strong> — Bel deze
+                zaak of sla hem over.
               </li>
               <li>
-                <strong className="text-[var(--text)]">Call</strong> — Dial with
-                the script on screen.
+                <strong className="text-[var(--text)]">Bellen</strong> — Bel met het
+                script op je scherm.
               </li>
               <li>
-                <strong className="text-[var(--text)]">Log</strong> — Record the
-                result. The next lead loads automatically.
+                <strong className="text-[var(--text)]">Noteren</strong> — Noteer het
+                resultaat. De volgende lead verschijnt vanzelf.
               </li>
             </ol>
             <button
@@ -187,7 +180,7 @@ export function WorkMode({
               className="btn btn-primary w-full"
               onClick={dismissBriefing}
             >
-              Start
+              Beginnen
             </button>
           </section>
         </div>
@@ -195,24 +188,24 @@ export function WorkMode({
 
       <div className="mission-strip">
         <span>
-          To triage <strong>{triageQueue.length}</strong>
+          Te selecteren <strong>{triageQueue.length}</strong>
         </span>
         <span>
-          Ready to call <strong>{callQueue.length}</strong>
+          Klaar om te bellen <strong>{callQueue.length}</strong>
         </span>
         <span>
-          Calls logged today <strong>{clearedToday}</strong>
+          Gebeld vandaag <strong>{clearedToday}</strong>
         </span>
-        <span className="ml-auto text-[var(--text-mute)]">You choose who to call</span>
+        <span className="ml-auto text-[var(--text-mute)]">Jij kiest wie je belt</span>
       </div>
 
       <div>
-        <p className="label">Work</p>
+        <p className="label">Werk</p>
         <h1 className="display text-3xl sm:text-4xl font-semibold mt-1">
-          One lead at a time.
+          Eén lead tegelijk.
         </h1>
         <p className="text-[var(--text-dim)] mt-2 max-w-xl">
-          Work through the active step. The rest can wait.
+          Werk de actieve stap af. De rest kan wachten.
         </p>
       </div>
 
@@ -245,9 +238,9 @@ export function WorkMode({
         <section className="panel p-5 sm:p-7 space-y-5 anim-card flex-1">
           {!currentTriage ? (
             <EmptyState
-              title="Nothing to triage"
-              body="Every business you found has been decided on. Search a new zone under Leads, or start calling."
-              actionLabel={callQueue.length ? "Go to Call" : "Find leads"}
+              title="Niets te selecteren"
+              body="Je hebt over elke gevonden zaak beslist. Zoek een nieuwe zone bij Leads, of begin met bellen."
+              actionLabel={callQueue.length ? "Naar Bellen" : "Leads zoeken"}
               onAction={callQueue.length ? () => setStep("call") : undefined}
               href={callQueue.length ? undefined : "/leads"}
             />
@@ -255,21 +248,21 @@ export function WorkMode({
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="label">Worth calling?</p>
+                  <p className="label">De moeite waard?</p>
                   <h2 className="display text-2xl sm:text-3xl font-semibold mt-1">
                     {currentTriage.name}
                   </h2>
                   <p className="text-sm text-[var(--text-dim)] mt-2">
                     {[currentTriage.address, currentTriage.city]
                       .filter(Boolean)
-                      .join(" · ") || "No address on file"}
+                      .join(" · ") || "Geen adres bekend"}
                   </p>
                 </div>
                 <div className="text-right mono text-xs text-[var(--text-dim)] space-y-1">
-                  <div>{currentTriage.category ?? "Local"}</div>
+                  <div>{categoryLabel(currentTriage.category)}</div>
                   <div className="score text-base">{currentTriage.score}</div>
                   {currentTriage.hasVending && (
-                    <div className="badge badge-live">Has vending</div>
+                    <div className="badge badge-live">Heeft automaat</div>
                   )}
                   {!currentTriage.phone && (
                     <div className="text-[var(--warn)]">no phone</div>
@@ -279,8 +272,8 @@ export function WorkMode({
 
               {currentTriage.hasVending && currentTriage.vendingDetail && (
                 <p className="text-sm text-[var(--accent)] border border-[var(--accent-dim)] px-3 py-2">
-                  {currentTriage.vendingDetail} — proven buyer, ask about
-                  replacement or a second machine.
+                  {currentTriage.vendingDetail} — bewezen koper, vraag naar
+                  vervanging of een tweede automaat.
                 </p>
               )}
 
@@ -288,8 +281,8 @@ export function WorkMode({
 
               <div className="space-y-1">
                 <div className="telemetry-row">
-                  <span>Phone</span>
-                  <span>{currentTriage.phone ?? "not in OpenStreetMap"}</span>
+                  <span>Telefoon</span>
+                  <span>{currentTriage.phone ?? "niet bekend"}</span>
                 </div>
                 {currentTriage.website && (
                   <div className="telemetry-row">
@@ -300,7 +293,7 @@ export function WorkMode({
                       rel="noreferrer"
                       className="text-[var(--accent)]"
                     >
-                      Open
+                      Openen
                     </a>
                   </div>
                 )}
@@ -313,7 +306,7 @@ export function WorkMode({
                   disabled={pending}
                   onClick={() => decide("contact")}
                 >
-                  Contact
+                  Bellen
                 </button>
                 <button
                   type="button"
@@ -321,10 +314,10 @@ export function WorkMode({
                   disabled={pending}
                   onClick={() => decide("skip")}
                 >
-                  Skip
+                  Overslaan
                 </button>
                 <Link href={`/leads/${currentTriage.id}`} className="btn btn-ghost">
-                  Company file
+                  Bedrijfsfiche
                 </Link>
               </div>
             </>
@@ -336,29 +329,29 @@ export function WorkMode({
         <section className="panel p-5 sm:p-7 space-y-6 anim-card flex-1">
           {!currentCall ? (
             <EmptyState
-              title="No calls queued"
-              body="Pick businesses to contact in Triage first. They appear here with a phone script."
-              actionLabel={triageQueue.length ? "Back to Triage" : "Find leads"}
+              title="Geen belafspraken"
+              body="Kies eerst zaken bij Selecteren. Ze verschijnen hier met een belscript."
+              actionLabel={triageQueue.length ? "Terug naar Selecteren" : "Leads zoeken"}
               onAction={triageQueue.length ? () => setStep("review") : undefined}
               href={triageQueue.length ? undefined : "/leads"}
             />
           ) : (
             <>
               <div className="text-center space-y-2">
-                <p className="label">Call now</p>
+                <p className="label">Nu bellen</p>
                 <h2 className="display text-3xl font-semibold">{currentCall.name}</h2>
                 <p className="text-sm text-[var(--text-dim)]">
                   {[currentCall.address, currentCall.city].filter(Boolean).join(" · ")}
                 </p>
                 {currentCall.hasVending && (
-                  <span className="badge badge-live">Has vending</span>
+                  <span className="badge badge-live">Heeft automaat</span>
                 )}
               </div>
 
               {currentCall.phone ? (
                 <a href={`tel:${currentCall.phone}`} className="dial-orb">
                   <div className="text-center px-4">
-                    <div className="label mb-2">Call</div>
+                    <div className="label mb-2">Bellen</div>
                     <div className="display text-xl font-semibold">
                       {currentCall.phone}
                     </div>
@@ -366,19 +359,19 @@ export function WorkMode({
                 </a>
               ) : (
                 <div className="dial-orb opacity-50">
-                  <span className="label">No phone number</span>
+                  <span className="label">Geen telefoonnummer</span>
                 </div>
               )}
 
               <div className="space-y-3 max-w-2xl mx-auto w-full">
                 {currentCall.hasVending && currentCall.vendingDetail && (
-                  <PlainBlock title="Already vending" body={currentCall.vendingDetail} />
+                  <PlainBlock title="Heeft al een automaat" body={currentCall.vendingDetail} />
                 )}
-                <PlainBlock title="Opener" body={opener} />
-                <PlainBlock title="Angle" body={angle} />
-                <PlainBlock title="Machine" body={machine} />
+                <PlainBlock title="Openingszin" body={opener} />
+                <PlainBlock title="Invalshoek" body={angle} />
+                <PlainBlock title="Automaat" body={machine} />
                 <div>
-                  <p className="label mb-2">What to ask</p>
+                  <p className="label mb-2">Wat je vraagt</p>
                   <ul className="space-y-2 text-sm text-[var(--text-dim)]">
                     {(discovery.length ? discovery : DEFAULT_QUESTIONS).map((q) => (
                       <li key={q} className="border border-[var(--border)] px-3 py-2">
@@ -387,7 +380,7 @@ export function WorkMode({
                     ))}
                   </ul>
                 </div>
-                <PlainBlock title="Likely objection" body={objection} />
+                <PlainBlock title="Verwacht bezwaar" body={objection} />
               </div>
 
               <div className="flex flex-wrap justify-center gap-2">
@@ -396,7 +389,7 @@ export function WorkMode({
                   className="btn btn-primary btn-xl"
                   onClick={() => setStep("log")}
                 >
-                  Log result
+                  Resultaat noteren
                 </button>
                 <button
                   type="button"
@@ -404,10 +397,10 @@ export function WorkMode({
                   disabled={pending}
                   onClick={skipCurrentCall}
                 >
-                  Skip for now
+                  Nu overslaan
                 </button>
                 <Link href={`/leads/${currentCall.id}`} className="btn btn-ghost">
-                  Company file
+                  Bedrijfsfiche
                 </Link>
               </div>
             </>
@@ -418,7 +411,7 @@ export function WorkMode({
       {step === "log" && currentCall && (
         <section className="panel p-5 sm:p-7 space-y-5 anim-card flex-1 max-w-2xl mx-auto w-full">
           <div>
-            <p className="label">Log result</p>
+            <p className="label">Resultaat noteren</p>
             <h2 className="display text-2xl font-semibold mt-1">{currentCall.name}</h2>
           </div>
 
@@ -436,14 +429,14 @@ export function WorkMode({
                 });
                 const data = await res.json().catch(() => ({}));
                 if (!res.ok) {
-                  setMessage(data.error || "Could not log call");
+                  setMessage(data.error || "Gesprek noteren is niet gelukt");
                   return;
                 }
                 setCallQueue((prev) => prev.filter((l) => l.id !== currentCall.id));
                 setOutcome("NO_ANSWER");
                 setNote("");
                 setCallbackAt("");
-                setMessage("Saved");
+                setMessage("Opgeslagen");
                 const next = await refreshCallQueue();
                 if (next?.length) setStep("call");
                 else if (triageQueue.length) setStep("review");
@@ -475,7 +468,7 @@ export function WorkMode({
               className="btn btn-ghost"
               onClick={() => setShowMoreOutcomes((v) => !v)}
             >
-              More outcomes
+              Meer resultaten
             </button>
             {showMoreOutcomes && (
               <div className="flex flex-wrap gap-2">
@@ -506,7 +499,7 @@ export function WorkMode({
             <textarea
               className="textarea"
               name="note"
-              placeholder="Optional note"
+              placeholder="Notitie (optioneel)"
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
@@ -515,7 +508,7 @@ export function WorkMode({
               className="btn btn-primary btn-xl w-full"
               disabled={pending}
             >
-              Save and next
+              Opslaan en volgende
             </button>
           </form>
         </section>
@@ -523,9 +516,9 @@ export function WorkMode({
 
       {step === "log" && !currentCall && (
         <EmptyState
-          title="Nothing to log"
-          body="Pick a call first."
-          actionLabel="Go to Call"
+          title="Niets te noteren"
+          body="Kies eerst een gesprek."
+          actionLabel="Naar Bellen"
           onAction={() => setStep("call")}
         />
       )}

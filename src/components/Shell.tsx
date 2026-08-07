@@ -57,7 +57,7 @@ export function Shell({
               MATO
             </Link>
             <div className="hidden sm:flex flex-col gap-0.5">
-              <span className="label">Sales workspace</span>
+              <span className="label">Verkoop</span>
               <span className="mono text-[0.65rem] text-[var(--text-mute)] tracking-[0.14em]">
                 {clock || "--:--:--"} · Vlaanderen
               </span>
@@ -77,7 +77,7 @@ export function Shell({
             ))}
             <form action={logout}>
               <button className="nav-link" type="submit">
-                Sign out
+                Afmelden
               </button>
             </form>
           </nav>

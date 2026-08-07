@@ -174,7 +174,7 @@ async function overpassQuery(ql: string, startAt = 0): Promise<OverpassElement[]
       lastError = err;
     }
   }
-  throw lastError ?? new Error("Overpass unavailable");
+  throw lastError ?? new Error("OpenStreetMap is niet bereikbaar");
 }
 
 /**
@@ -342,11 +342,30 @@ out center 500;`;
   }
 }
 
+/** vending=* waarden vertaald voor weergave. */
+const VENDING_LABELS: Record<string, string> = {
+  bread: "brood",
+  milk: "melk",
+  food: "voeding",
+  eggs: "eieren",
+  cheese: "kaas",
+  farm_produce: "hoeveproducten",
+  drinks: "dranken",
+  ice_cream: "ijs",
+  pizza: "pizza",
+  potatoes: "aardappelen",
+  fruit: "fruit",
+  vegetables: "groenten",
+};
+
+export function vendingLabel(vending?: string | null, operator?: string | null) {
+  const kind = vending ? (VENDING_LABELS[vending] ?? vending.replaceAll("_", " ")) : null;
+  const what = kind ? `${kind}automaat` : "automaat";
+  return operator ? `${what} aanwezig (uitbater: ${operator})` : `${what} aanwezig`;
+}
+
 function describeVending(v: VendingPoint) {
-  const kind = v.vending ? v.vending.replaceAll("_", " ") : "vending";
-  return v.operator
-    ? `${kind} machine on site (operator: ${v.operator})`
-    : `${kind} machine on site`;
+  return vendingLabel(v.vending, v.operator);
 }
 
 export type ScanResult = {
@@ -435,7 +454,7 @@ export async function scanZoneCandidates(
   // Nothing came back at all — surface that rather than reporting an empty
   // province, which would look like "there are no bakeries in West-Vlaanderen".
   if (townsOk === 0) {
-    throw new Error("Overpass unavailable — no results returned");
+    throw new Error("OpenStreetMap gaf niets terug — probeer straks opnieuw");
   }
 
   // Flag businesses that already run a machine.

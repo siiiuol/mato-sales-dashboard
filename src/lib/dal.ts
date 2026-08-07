@@ -34,9 +34,9 @@ export const getCurrentUser = cache(async () => {
 
 export async function requireUser(roles?: readonly AppRole[]) {
   const user = await getCurrentUser();
-  if (!user) throw new AuthError("Authentication required", 401);
+  if (!user) throw new AuthError("Aanmelden vereist", 401);
   if (roles && !roles.includes(user.role)) {
-    throw new AuthError("Insufficient role", 403);
+    throw new AuthError("Onvoldoende rechten", 403);
   }
   return user;
 }
@@ -54,7 +54,7 @@ export function apiError(error: unknown) {
     return Response.json({ error: error.message }, { status: error.status });
   }
   console.error(error);
-  return Response.json({ error: "Request failed" }, { status: 500 });
+  return Response.json({ error: "Er ging iets mis" }, { status: 500 });
 }
 
 export async function audit(

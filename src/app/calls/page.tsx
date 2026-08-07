@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { logCall } from "@/lib/actions";
-import { CALL_OUTCOMES } from "@/lib/constants";
+import { CALL_OUTCOMES, statusLabel } from "@/lib/constants";
 import { requirePageUser } from "@/lib/dal";
 import Link from "next/link";
 
@@ -61,24 +61,24 @@ export default async function CallsPage({
     <div className="space-y-5 anim-lock">
       <div className="mission-strip">
         <span>
-          Ready <strong>{due.length}</strong>
+          Klaar <strong>{due.length}</strong>
         </span>
         <span className="ml-auto">
           <Link href="/" className="text-[var(--accent)]">
-            Work mode
+            Werk
           </Link>
         </span>
       </div>
 
       <div>
-        <p className="label">Call</p>
-        <h1 className="display text-3xl font-semibold mt-1">Today's calls</h1>
+        <p className="label">Bellen</p>
+        <h1 className="display text-3xl font-semibold mt-1">Bellen vandaag</h1>
       </div>
 
       {current ? (
         <section className="panel p-5 sm:p-8 space-y-6">
           <div className="text-center space-y-2">
-            <p className="label">Calling</p>
+            <p className="label">Je belt</p>
             <h2 className="display text-3xl font-semibold">{current.name}</h2>
             <p className="text-sm text-[var(--text-dim)]">
               {[current.address, current.city, current.province].filter(Boolean).join(" · ")}
@@ -88,25 +88,25 @@ export default async function CallsPage({
           {current.phone ? (
             <a href={`tel:${current.phone}`} className="dial-orb">
               <div className="text-center px-4">
-                <div className="label mb-2">Call</div>
+                <div className="label mb-2">Bellen</div>
                 <div className="display text-xl font-semibold">{current.phone}</div>
               </div>
             </a>
           ) : (
             <div className="dial-orb opacity-50">
-              <span className="label">No phone</span>
+              <span className="label">Geen nummer</span>
             </div>
           )}
 
           <div className="grid gap-3 max-w-2xl mx-auto w-full">
             <Block
-              label="Opener"
-              value={current.phoneOpener || pitches.MACHINE || "Introduce MATO and ask about unattended product availability."}
+              label="Openingszin"
+              value={current.phoneOpener || pitches.MACHINE || "Stel MATO voor en vraag naar onbemande verkoop."}
             />
-            <Block label="Angle" value={current.recommendedAngle} />
-            <Block label="Machine" value={current.recommendedMachine} />
+            <Block label="Invalshoek" value={current.recommendedAngle} />
+            <Block label="Automaat" value={current.recommendedMachine} />
             <div className="border border-[var(--border)] p-3">
-              <div className="label mb-2">What to ask</div>
+              <div className="label mb-2">Wat je vraagt</div>
               <ul className="text-sm space-y-1 text-[var(--text-dim)]">
                 {(discovery.length
                   ? discovery
@@ -120,7 +120,7 @@ export default async function CallsPage({
                 ))}
               </ul>
             </div>
-            <Block label="Likely objection" value={current.likelyObjection} />
+            <Block label="Verwacht bezwaar" value={current.likelyObjection} />
           </div>
 
           <form action={logCall} className="max-w-2xl mx-auto w-full grid gap-3">
@@ -147,7 +147,7 @@ export default async function CallsPage({
               ))}
             </div>
             <details className="text-sm">
-              <summary className="label cursor-pointer">More outcomes</summary>
+              <summary className="label cursor-pointer">Meer resultaten</summary>
               <div className="grid grid-cols-2 gap-2 mt-2">
                 {CALL_OUTCOMES.filter((o) =>
                   ["VOICEMAIL", "WRONG_NUMBER"].includes(o.value)
@@ -160,21 +160,21 @@ export default async function CallsPage({
               </div>
             </details>
             <input type="datetime-local" name="callbackAt" className="input" />
-            <input name="note" className="input" placeholder="Optional note" />
+            <input name="note" className="input" placeholder="Notitie (optioneel)" />
             <button type="submit" className="btn btn-primary btn-xl w-full">
-              Log and next
+              Noteren en volgende
             </button>
           </form>
         </section>
       ) : (
         <section className="panel p-8 text-center text-[var(--text-dim)]">
-          Nothing cleared to call yet. Triage a few leads first.
+          Nog niets klaar om te bellen. Selecteer eerst enkele leads.
         </section>
       )}
 
       <div>
         <Link href={showQueue ? "/calls" : "/calls?queue=1"} className="btn btn-ghost">
-          {showQueue ? "Hide queue" : "Queue"}
+          {showQueue ? "Wachtrij verbergen" : "Wachtrij"}
         </Link>
       </div>
 
@@ -184,7 +184,7 @@ export default async function CallsPage({
             <thead>
               <tr>
                 <th>Lead</th>
-                <th>Phone</th>
+                <th>Telefoon</th>
                 <th>Status</th>
               </tr>
             </thead>
@@ -198,7 +198,7 @@ export default async function CallsPage({
                   </td>
                   <td className="mono text-sm">{l.phone ?? "—"}</td>
                   <td>
-                    <span className="badge">{l.status}</span>
+                    <span className="badge">{statusLabel(l.status)}</span>
                   </td>
                 </tr>
               ))}
@@ -223,7 +223,7 @@ function Block({ label, value }: { label: string; value?: string | null }) {
   return (
     <div className="border border-[var(--border)] p-3">
       <div className="label mb-2">{label}</div>
-      <p className="text-sm text-[var(--text-dim)]">{value || "Not supplied"}</p>
+      <p className="text-sm text-[var(--text-dim)]">{value || "Niet ingevuld"}</p>
     </div>
   );
 }

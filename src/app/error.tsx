@@ -17,16 +17,16 @@ export default function ErrorBoundary({
   return (
     <div className="panel p-6 max-w-2xl mx-auto space-y-4 anim-lock">
       <div>
-        <p className="label text-[var(--warn)]">Not saved</p>
-        <h1 className="display text-2xl font-semibold mt-1">That didn&apos;t go through</h1>
+        <p className="label text-[var(--warn)]">Niet opgeslagen</p>
+        <h1 className="display text-2xl font-semibold mt-1">Dat is niet gelukt</h1>
       </div>
       <p className="text-sm whitespace-pre-wrap">{error.message}</p>
       <div className="flex flex-wrap gap-2">
         <button className="btn btn-primary" type="button" onClick={reset}>
-          Try again
+          Opnieuw proberen
         </button>
         <Link className="btn" href="/">
-          Back to work
+          Terug naar Werk
         </Link>
       </div>
       {error.digest && (

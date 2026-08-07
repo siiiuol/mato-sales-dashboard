@@ -11,11 +11,11 @@ export function LoginForm() {
   return (
     <form action={action} className="space-y-4">
       <div>
-        <label htmlFor="email" className="label block mb-1">Email</label>
+        <label htmlFor="email" className="label block mb-1">E-mailadres</label>
         <input id="email" name="email" type="email" autoComplete="username" className="input" required />
       </div>
       <div>
-        <label htmlFor="password" className="label block mb-1">Password</label>
+        <label htmlFor="password" className="label block mb-1">Wachtwoord</label>
         <input
           id="password"
           name="password"
@@ -30,7 +30,7 @@ export function LoginForm() {
         <p className="text-sm text-[var(--danger)]" role="alert">{state.error}</p>
       )}
       <button className="btn btn-primary w-full" disabled={pending}>
-        {pending ? "Signing in…" : "Sign in"}
+        {pending ? "Bezig met aanmelden…" : "Aanmelden"}
       </button>
     </form>
   );

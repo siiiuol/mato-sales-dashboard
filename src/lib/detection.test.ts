@@ -43,12 +43,12 @@ test("an existing vending machine raises the score rather than lowering it", () 
     hasVending: true,
   });
   assert.ok(with_.score > without.score, "vending should be a positive signal");
-  assert.match(with_.reason, /already has vending/);
+  assert.match(with_.reason, /heeft al een automaat/);
 });
 
 test("a reachable business outranks an identical one with no phone", () => {
   const reachable = scoreLead({ category: "bakery", phone: "+32 51 20 00 00" });
   const unreachable = scoreLead({ category: "bakery", phone: null });
   assert.ok(reachable.score > unreachable.score);
-  assert.match(unreachable.reason, /no phone/);
+  assert.match(unreachable.reason, /geen telefoon/);
 });

@@ -30,10 +30,10 @@ export async function POST(request: Request) {
       },
     });
     if (!lead) {
-      return NextResponse.json({ error: "Lead not found" }, { status: 404 });
+      return NextResponse.json({ error: "Lead niet gevonden" }, { status: 404 });
     }
     if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
-      return NextResponse.json({ error: "Compliance block" }, { status: 403 });
+      return NextResponse.json({ error: "Geblokkeerd: mag niet gecontacteerd worden" }, { status: 403 });
     }
 
     const nextFollowUpAt =

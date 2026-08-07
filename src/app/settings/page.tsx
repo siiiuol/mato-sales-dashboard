@@ -26,38 +26,38 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-6 anim-lock max-w-3xl">
       <div>
-        <p className="label">Admin</p>
-        <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Settings</h1>
+        <p className="label">Beheer</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Instellingen</h1>
         <p className="text-sm text-[var(--text-dim)] mt-1">
-          EUR · Europe/Brussels · lead discovery runs on free OpenStreetMap data
+          EUR · Europe/Brussels · zoeken werkt standaard op gratis OpenStreetMap-data
         </p>
       </div>
 
       <section className="panel p-4 text-sm text-[var(--text-dim)] space-y-2">
-        <div className="label text-[var(--accent)]">How lead search works</div>
+        <div className="label text-[var(--accent)]">Hoe het zoeken werkt</div>
         <p>
-          With a Google Places key set below, searching a zone sweeps every town
-          in it for bakeries, patisseries, butchers, chocolatiers, ice-cream shops
-          and traiteurs — independent shops only, not supermarket chains. Around
-          nine in ten come with a phone number.
+          Met een Google Places-sleutel hieronder doorzoekt een zone elke gemeente
+          op bakkerijen, patisserieën, slagerijen, chocolatiers, ijssalons en
+          traiteurs — enkel zelfstandige zaken, geen supermarktketens. Ongeveer
+          negen op de tien hebben een telefoonnummer.
         </p>
         <p>
-          Leave the key empty and it falls back to{" "}
-          <span className="mono text-[var(--text)]">OpenStreetMap</span>, which is
-          free but slower, covers less, and carries a phone number for only about
-          a third of shops. If a Places search fails the app falls back
-          automatically and tells you why.
+          Laat je de sleutel leeg, dan valt de app terug op{" "}
+          <span className="mono text-[var(--text)]">OpenStreetMap</span>: gratis,
+          maar trager, met minder dekking en een telefoonnummer bij slechts
+          ongeveer een derde. Mislukt Places, dan schakelt de app automatisch over
+          en zegt waarom.
         </p>
         <p>
-          Either way it also checks OpenStreetMap for premises that already run a
-          vending machine and ranks those highest — they are proven buyers.
-          Searching the same zone twice never duplicates a business.
+          In beide gevallen zoekt de app ook op OpenStreetMap naar zaken die al
+          een automaat hebben en zet die bovenaan — dat zijn bewezen kopers.
+          Dezelfde zone twee keer zoeken levert nooit dubbels op.
         </p>
       </section>
 
       <form action={saveSettings} className="panel p-4 sm:p-6 space-y-4">
         <div>
-          <label className="label block mb-1">Business name</label>
+          <label className="label block mb-1">Bedrijfsnaam</label>
           <input
             name="businessName"
             className="input"
@@ -67,23 +67,23 @@ export default async function SettingsPage() {
 
         <div>
           <label className="label block mb-1">
-            Google Places API key (optional — leave empty for free OpenStreetMap)
+            Google Places API-sleutel (optioneel — leeg = gratis OpenStreetMap)
           </label>
           <input
             name="placesApiKey"
             className="input mono"
             type="password"
             autoComplete="off"
-            placeholder="Empty = OSM Overpass (free)"
+            placeholder="Leeg = OpenStreetMap (gratis)"
             defaultValue={settings.placesApiKey || ""}
           />
           <p className="text-xs text-[var(--text-dim)] mt-1">
-            Only needed if you want paid Google coverage. Scans work without it.
+            Alleen nodig voor de betalende Google-dekking. Zoeken werkt ook zonder.
           </p>
         </div>
 
         <div>
-          <label className="label block mb-1">Detection categories (comma-separated)</label>
+          <label className="label block mb-1">Categorieën om te zoeken (komma-gescheiden)</label>
           <input
             name="categories"
             className="input"
@@ -92,7 +92,7 @@ export default async function SettingsPage() {
         </div>
 
         <div>
-          <label className="label block mb-2">Enabled zones</label>
+          <label className="label block mb-2">Actieve zones</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {FLANDERS_ZONES.map((z) => (
               <label key={z} className="flex items-center gap-2 text-sm">
@@ -109,7 +109,7 @@ export default async function SettingsPage() {
         </div>
 
         <div>
-          <label className="label block mb-1">Customer exclusion radius (km)</label>
+          <label className="label block mb-1">Uitsluitingsstraal rond klanten (km)</label>
           <input
             name="exclusionRadiusKm"
             type="number"
@@ -120,7 +120,7 @@ export default async function SettingsPage() {
         </div>
 
         <div>
-          <label className="label block mb-1">Pitch templates (JSON)</label>
+          <label className="label block mb-1">Belscripts (JSON)</label>
           <textarea
             name="pitchTemplates"
             className="textarea mono text-sm"
@@ -130,7 +130,7 @@ export default async function SettingsPage() {
         </div>
 
         <button type="submit" className="btn btn-primary">
-          Save settings
+          Instellingen opslaan
         </button>
       </form>
     </div>

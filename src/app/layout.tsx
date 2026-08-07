@@ -30,8 +30,8 @@ const mono = JetBrains_Mono({
 });
 
 export const metadata = {
-  title: "MATO — Sales",
-  description: "Find, call and log leads across Flanders.",
+  title: "MATO — Verkoop",
+  description: "Leads zoeken, bellen en opvolgen in heel Vlaanderen.",
 };
 
 export default async function RootLayout({

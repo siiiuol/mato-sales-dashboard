@@ -42,15 +42,15 @@ export function LeadSearchPanel({
               ? "Google Places"
               : "search";
         setMessage(
-          `Found ${res.created} new lead${res.created === 1 ? "" : "s"} in ${zone}` +
-            (res.skipped ? ` · ${res.skipped} already known` : "") +
+          `${res.created} nieuwe lead${res.created === 1 ? "" : "s"} gevonden in ${zone}` +
+            (res.skipped ? ` · ${res.skipped} al bekend` : "") +
             ` · ${sourceLabel}`
         );
         if (res.placesProblem) setWarning(res.placesProblem);
         else if (res.coverage) setCoverage(res.coverage);
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Search failed");
+        setError(err instanceof Error ? err.message : "Zoeken is niet gelukt");
       }
     });
   };
@@ -58,12 +58,12 @@ export function LeadSearchPanel({
   return (
     <section className="panel p-4 sm:p-5 space-y-4">
       <div>
-        <h2 className="label text-[var(--accent)]">Search for leads</h2>
+        <h2 className="label text-[var(--accent)]">Leads zoeken</h2>
         <p className="text-sm text-[var(--text-dim)] mt-1">
-          Searches every town in the zone for bakeries, patisseries, butchers,
-          chocolatiers, ice-cream shops and farm shops — plus any that already run
-          a vending machine. Search the same zone again to fill gaps; nothing is
-          duplicated.
+          Doorzoekt elke gemeente in de zone op bakkerijen, patisserieën,
+          slagerijen, chocolatiers, ijssalons en hoevewinkels — en op zaken die al
+          een automaat hebben. Zoek dezelfde zone gerust opnieuw; niets wordt
+          dubbel toegevoegd.
         </p>
       </div>
 
@@ -89,7 +89,7 @@ export function LeadSearchPanel({
           disabled={pending || !zone}
           onClick={runSearch}
         >
-          {pending ? "Searching…" : "Search for leads"}
+          {pending ? "Bezig met zoeken…" : "Leads zoeken"}
         </button>
       </div>
 

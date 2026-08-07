@@ -1,16 +1,16 @@
 export const NAV = [
-  { href: "/", label: "Work" },
+  { href: "/", label: "Werk" },
   { href: "/leads", label: "Leads" },
-  { href: "/calls", label: "Calls" },
+  { href: "/calls", label: "Bellen" },
 ] as const;
 
-export const NAV_ADMIN = [{ href: "/settings", label: "Settings" }] as const;
+export const NAV_ADMIN = [{ href: "/settings", label: "Instellingen" }] as const;
 
-/** Triage → Call → Log is genuinely ordered, so the steps stay numbered. */
+/** Selecteren → Bellen → Noteren is een echte volgorde, dus genummerd. */
 export const WORK_STEPS = [
-  { id: "review", code: "1", label: "Triage" },
-  { id: "call", code: "2", label: "Call" },
-  { id: "log", code: "3", label: "Log" },
+  { id: "review", code: "1", label: "Selecteren" },
+  { id: "call", code: "2", label: "Bellen" },
+  { id: "log", code: "3", label: "Noteren" },
 ] as const;
 
 export const FLANDERS_ZONES = [
@@ -150,6 +150,57 @@ export const LEAD_STATUSES = [
   "SKIPPED",
   "DO_NOT_CONTACT",
 ] as const;
+
+/**
+ * De statuswaarden blijven Engels in de database — alleen de weergave is
+ * Nederlands. Zo blijft alle bestaande data geldig.
+ */
+export const STATUS_LABELS: Record<string, string> = {
+  NEW: "Nieuw",
+  TO_CALL: "Te bellen",
+  CONTACTED: "Gecontacteerd",
+  FOLLOW_UP: "Opvolgen",
+  NEGOTIATION: "In gesprek",
+  WON: "Klant",
+  LOST: "Afgehaakt",
+  SKIPPED: "Overgeslagen",
+  DO_NOT_CONTACT: "Niet contacteren",
+};
+
+export const COMPLIANCE_LABELS: Record<string, string> = {
+  PENDING: "Nog te beslissen",
+  CLEARED: "Goedgekeurd",
+  BLOCKED: "Geblokkeerd",
+};
+
+/** Categorieën komen uit OpenStreetMap/Places en worden Engels opgeslagen. */
+export const CATEGORY_LABELS: Record<string, string> = {
+  bakery: "Bakkerij",
+  bakkerij: "Bakkerij",
+  patisserie: "Patisserie",
+  butcher: "Slagerij",
+  slagerij: "Slagerij",
+  chocolatier: "Chocolatier",
+  "ice cream": "IJssalon",
+  ijssalon: "IJssalon",
+  traiteur: "Traiteur",
+  cheese: "Kaaswinkel",
+  "farm shop": "Hoevewinkel",
+  hoevewinkel: "Hoevewinkel",
+  florist: "Bloemist",
+  takeaway: "Afhaal",
+  cafe: "Café",
+  convenience: "Buurtwinkel",
+};
+
+export function statusLabel(status: string) {
+  return STATUS_LABELS[status] ?? status.replaceAll("_", " ").toLowerCase();
+}
+
+export function categoryLabel(category?: string | null) {
+  if (!category) return "Onbekend";
+  return CATEGORY_LABELS[category.toLowerCase()] ?? category;
+}
 
 /** Creative types (spec §30.2). */
 export const CREATIVE_TYPES = [
@@ -460,12 +511,12 @@ export const DEAL_STAGES = [
 ] as const;
 
 export const CALL_OUTCOMES = [
-  { value: "NO_ANSWER", label: "No answer" },
+  { value: "NO_ANSWER", label: "Niet opgenomen" },
   { value: "VOICEMAIL", label: "Voicemail" },
-  { value: "WRONG_NUMBER", label: "Wrong number" },
-  { value: "INTERESTED", label: "Interested" },
-  { value: "NOT_INTERESTED", label: "Not interested" },
-  { value: "CALLBACK", label: "Callback" },
+  { value: "WRONG_NUMBER", label: "Verkeerd nummer" },
+  { value: "INTERESTED", label: "Interesse" },
+  { value: "NOT_INTERESTED", label: "Geen interesse" },
+  { value: "CALLBACK", label: "Terugbellen" },
 ] as const;
 
 export function formatEUR(value: number) {

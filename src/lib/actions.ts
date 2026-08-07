@@ -23,7 +23,7 @@ async function getSettings() {
 export async function scanZone(zone: string) {
   await requireUser(["admin", "sales", "reviewer"]);
   if (!FLANDERS_ZONES.includes(zone as (typeof FLANDERS_ZONES)[number])) {
-    throw new Error("Invalid zone");
+    throw new Error("Ongeldige zone");
   }
   const settings = await getSettings();
   const result = await runDetection(prisma, zone, settings);
@@ -49,9 +49,9 @@ export async function logCall(formData: FormData) {
     where: { id: leadId },
     select: { doNotContact: true, complianceStatus: true },
   });
-  if (!lead) throw new Error("Lead not found");
+  if (!lead) throw new Error("Lead niet gevonden");
   if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
-    throw new Error("Compliance block: outreach is not permitted");
+    throw new Error("Geblokkeerd: deze lead mag niet gecontacteerd worden");
   }
 
   const nextFollowUpAt =
@@ -146,9 +146,9 @@ export async function contactLead(leadId: string) {
     where: { id },
     select: { doNotContact: true, complianceStatus: true },
   });
-  if (!lead) throw new Error("Lead not found");
+  if (!lead) throw new Error("Lead niet gevonden");
   if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
-    throw new Error("Compliance block: this lead may not be contacted");
+    throw new Error("Geblokkeerd: deze lead mag niet gecontacteerd worden");
   }
 
   const now = new Date();
@@ -175,7 +175,7 @@ export async function skipLead(leadId: string) {
     where: { id },
     select: { status: true },
   });
-  if (!lead) throw new Error("Lead not found");
+  if (!lead) throw new Error("Lead niet gevonden");
 
   await prisma.lead.update({
     where: { id },
