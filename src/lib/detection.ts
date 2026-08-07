@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { ZONE_CENTERS } from "./constants";
+import { ZONE_TOWNS } from "./constants";
 import { scanZoneCandidates, type OsmCandidate } from "./osm";
 
 const CATEGORY_WEIGHT: Record<string, number> = {
@@ -103,87 +103,174 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
   return 2 * R * Math.asin(Math.sqrt(x));
 }
 
+/**
+ * Google Places (New) discovery — the paid, high-coverage alternative to OSM.
+ *
+ * Uses the same town-by-town sweep as the free path so a whole province is
+ * covered rather than one circle around its capital.
+ *
+ * The legacy `maps.googleapis.com/maps/api/place/*` endpoints this used to call
+ * are switched off for projects created after March 2025, so this targets
+ * Places API (New).
+ */
+const PLACES_TYPES: Record<string, string[]> = {
+  bakery: ["bakery"],
+  bakkerij: ["bakery"],
+  patisserie: ["bakery", "candy_store"],
+  chocolatier: ["candy_store"],
+  "ice cream": ["ice_cream_shop"],
+  ijssalon: ["ice_cream_shop"],
+  butcher: ["grocery_store"],
+  slagerij: ["grocery_store"],
+  traiteur: ["meal_takeaway"],
+  cheese: ["grocery_store"],
+  "farm shop": ["grocery_store"],
+  hoevewinkel: ["grocery_store"],
+  takeaway: ["meal_takeaway"],
+  cafe: ["cafe"],
+  convenience: ["convenience_store"],
+};
+
+export class PlacesConfigError extends Error {}
+
 async function placesCandidates(
   zone: string,
   categories: string[],
   apiKey: string
-) {
-  const center = ZONE_CENTERS[zone];
-  if (!center) return [];
+): Promise<OsmCandidate[]> {
+  const towns = ZONE_TOWNS[zone] ?? [];
+  if (!towns.length) return [];
 
+  const types = [
+    ...new Set(
+      categories.flatMap((c) => PLACES_TYPES[c.toLowerCase()] ?? []).filter(Boolean)
+    ),
+  ];
+  if (!types.length) types.push("bakery");
+
+  const seen = new Set<string>();
   const results: OsmCandidate[] = [];
-  // Nearby Search — one query per category for the zone center
-  for (const category of categories.slice(0, 4)) {
-    const url = new URL("https://maps.googleapis.com/maps/api/place/nearbysearch/json");
-    url.searchParams.set("location", `${center.lat},${center.lng}`);
-    url.searchParams.set("radius", "25000");
-    url.searchParams.set("keyword", category);
-    url.searchParams.set("key", apiKey);
 
-    const res = await fetch(url.toString());
-    if (!res.ok) continue;
+  for (const town of towns) {
+    const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "X-Goog-Api-Key": apiKey,
+        "X-Goog-FieldMask": [
+          "places.id",
+          "places.displayName",
+          "places.formattedAddress",
+          "places.nationalPhoneNumber",
+          "places.internationalPhoneNumber",
+          "places.websiteUri",
+          "places.location",
+          "places.primaryType",
+          "places.userRatingCount",
+          "places.addressComponents",
+        ].join(","),
+      },
+      body: JSON.stringify({
+        includedTypes: types,
+        maxResultCount: 20,
+        locationRestriction: {
+          circle: {
+            center: { latitude: town.lat, longitude: town.lng },
+            radius: 7000,
+          },
+        },
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: { status?: string; message?: string };
+      };
+      // A misconfigured key must never look like "this province has no bakeries".
+      if (res.status === 401 || res.status === 403) {
+        throw new PlacesConfigError(
+          `Google Places rejected the key (${body.error?.status ?? res.status}). ` +
+            `Enable "Places API (New)" for this project in Google Cloud Console, ` +
+            `make sure billing is on, and check the key's API restrictions. ` +
+            `Clear the key in Settings to go back to free OpenStreetMap search.`
+        );
+      }
+      throw new PlacesConfigError(
+        `Google Places request failed (${res.status}): ${body.error?.message ?? "unknown error"}`
+      );
+    }
+
     const data = (await res.json()) as {
-      results?: Array<{
-        place_id: string;
-        name: string;
-        vicinity?: string;
-        geometry?: { location?: { lat: number; lng: number } };
-        rating?: number;
-        user_ratings_total?: number;
-        types?: string[];
+      places?: Array<{
+        id?: string;
+        displayName?: { text?: string };
+        formattedAddress?: string;
+        nationalPhoneNumber?: string;
+        internationalPhoneNumber?: string;
+        websiteUri?: string;
+        location?: { latitude?: number; longitude?: number };
+        primaryType?: string;
+        userRatingCount?: number;
+        addressComponents?: Array<{ longText?: string; types?: string[] }>;
       }>;
     };
 
-    for (const place of data.results ?? []) {
-      const lat = place.geometry?.location?.lat;
-      const lng = place.geometry?.location?.lng;
-      if (!lat || !lng || !place.place_id) continue;
+    for (const place of data.places ?? []) {
+      const id = place.id;
+      const name = place.displayName?.text;
+      const lat = place.location?.latitude;
+      const lng = place.location?.longitude;
+      if (!id || !name || lat == null || lng == null) continue;
+      const placeId = `places:${id}`;
+      if (seen.has(placeId)) continue;
+      seen.add(placeId);
 
-      // Detail for phone
-      let phone: string | null = null;
-      let website: string | null = null;
-      try {
-        const detailUrl = new URL(
-          "https://maps.googleapis.com/maps/api/place/details/json"
-        );
-        detailUrl.searchParams.set("place_id", place.place_id);
-        detailUrl.searchParams.set("fields", "formatted_phone_number,website,url");
-        detailUrl.searchParams.set("key", apiKey);
-        const detailRes = await fetch(detailUrl.toString());
-        if (detailRes.ok) {
-          const detail = (await detailRes.json()) as {
-            result?: {
-              formatted_phone_number?: string;
-              website?: string;
-              url?: string;
-            };
-          };
-          phone = detail.result?.formatted_phone_number ?? null;
-          website = detail.result?.website ?? null;
-        }
-      } catch {
-        // ignore detail failures
-      }
+      const locality = place.addressComponents?.find((c) =>
+        c.types?.includes("locality")
+      )?.longText;
 
       results.push({
-        name: place.name,
-        address: place.vicinity ?? null,
-        city: center.cities[0],
+        name,
+        address: place.formattedAddress ?? null,
+        city: locality ?? town.name,
         province: zone,
         lat,
         lng,
-        category,
-        phone,
-        website,
-        mapsUrl: `https://www.google.com/maps/search/?api=1&query=place_id:${place.place_id}`,
-        placeId: place.place_id,
-        reviewCount: place.user_ratings_total ?? 0,
-      } as never);
+        category: placesCategory(place.primaryType),
+        phone: place.nationalPhoneNumber ?? place.internationalPhoneNumber ?? null,
+        website: place.websiteUri ?? null,
+        mapsUrl: `https://www.google.com/maps/place/?q=place_id:${id}`,
+        placeId,
+        reviewCount: place.userRatingCount ?? 0,
+        hasVending: false,
+        vendingDetail: null,
+      });
     }
   }
 
   return results;
 }
+
+function placesCategory(primaryType?: string): string {
+  switch (primaryType) {
+    case "bakery":
+      return "bakery";
+    case "ice_cream_shop":
+      return "ice cream";
+    case "candy_store":
+      return "chocolatier";
+    case "meal_takeaway":
+      return "takeaway";
+    case "cafe":
+      return "cafe";
+    case "convenience_store":
+      return "convenience";
+    default:
+      return "bakery";
+  }
+}
+
 
 export async function runDetection(
   prisma: PrismaClient,
@@ -196,16 +283,29 @@ export async function runDetection(
 
   try {
     const categories = parseCategories(settings.detectionCategories);
-    const useGoogle = Boolean(settings.placesApiKey?.trim());
-    let candidates: OsmCandidate[];
+    const wantGoogle = Boolean(settings.placesApiKey?.trim());
+    let candidates: OsmCandidate[] = [];
     let coverage = "";
-    if (useGoogle) {
-      candidates = (await placesCandidates(
-        zone,
-        categories,
-        settings.placesApiKey.trim()
-      )) as OsmCandidate[];
-    } else {
+    let usedGoogle = false;
+    let placesProblem = "";
+
+    if (wantGoogle) {
+      try {
+        candidates = await placesCandidates(
+          zone,
+          categories,
+          settings.placesApiKey.trim()
+        );
+        usedGoogle = true;
+        coverage = `Google Places · ${ZONE_TOWNS[zone]?.length ?? 0} towns`;
+      } catch (err) {
+        // A broken key must not mean "no leads today" — fall back to the free
+        // source and say plainly why.
+        placesProblem = err instanceof Error ? err.message : "Google Places failed";
+      }
+    }
+
+    if (!usedGoogle) {
       const scan = await scanZoneCandidates(zone, categories);
       candidates = scan.candidates;
       coverage = `${scan.townsOk}/${scan.townsTotal} towns covered`;
@@ -215,7 +315,10 @@ export async function runDetection(
         coverage += ` · OpenStreetMap was busy for ${scan.townsFailed.join(", ")} — scan again to cover them`;
       }
     }
-    const source = useGoogle ? "places" : "openstreetmap";
+    if (placesProblem) {
+      coverage = `${placesProblem} — searched OpenStreetMap instead · ${coverage}`;
+    }
+    const source = usedGoogle ? "places" : "openstreetmap";
 
     // Places we already sell to. A lead marked WON is the record of that —
     // there is no separate customer list any more.
@@ -290,11 +393,19 @@ export async function runDetection(
         finishedAt: new Date(),
         createdCount: created,
         skippedCount: skipped,
-        detail: useGoogle ? "Google Places scan" : `OpenStreetMap scan · ${coverage}`,
+        detail: `${usedGoogle ? "Google Places" : "OpenStreetMap"} scan · ${coverage}`,
       },
     });
 
-    return { runId: run.id, created, skipped, demo: false, source, coverage };
+    return {
+      runId: run.id,
+      created,
+      skipped,
+      demo: false,
+      source,
+      coverage,
+      placesProblem: placesProblem || null,
+    };
   } catch (err) {
     await prisma.detectionRun.update({
       where: { id: run.id },
