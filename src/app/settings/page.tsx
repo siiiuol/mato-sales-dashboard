@@ -36,19 +36,22 @@ export default async function SettingsPage() {
       <section className="panel p-4 text-sm text-[var(--text-dim)] space-y-2">
         <div className="label text-[var(--accent)]">How lead search works</div>
         <p>
-          Searching a zone queries{" "}
-          <span className="mono text-[var(--text)]">OpenStreetMap</span> town by town
-          for local food businesses, and separately for shops that already run a
-          vending machine. It is free and needs no API key.
+          With a Google Places key set below, searching a zone sweeps every town
+          in it for bakeries, patisseries, butchers, chocolatiers, ice-cream shops
+          and traiteurs — independent shops only, not supermarket chains. Around
+          nine in ten come with a phone number.
         </p>
         <p>
-          OpenStreetMap&apos;s public servers throttle, so one search usually covers
-          part of a province. Search the same zone again to fill the gaps —
-          businesses already found are never duplicated.
+          Leave the key empty and it falls back to{" "}
+          <span className="mono text-[var(--text)]">OpenStreetMap</span>, which is
+          free but slower, covers less, and carries a phone number for only about
+          a third of shops. If a Places search fails the app falls back
+          automatically and tells you why.
         </p>
         <p>
-          Roughly a third of shops publish a phone number to OpenStreetMap. Those
-          are ranked highest, since a lead you cannot dial is not yet a lead.
+          Either way it also checks OpenStreetMap for premises that already run a
+          vending machine and ranks those highest — they are proven buyers.
+          Searching the same zone twice never duplicates a business.
         </p>
       </section>
 

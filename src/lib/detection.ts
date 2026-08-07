@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import { ZONE_TOWNS } from "./constants";
-import { scanZoneCandidates, type OsmCandidate } from "./osm";
+import { scanZoneCandidates, vendingMachines, type OsmCandidate } from "./osm";
 
 const CATEGORY_WEIGHT: Record<string, number> = {
   bakery: 34,
@@ -114,22 +114,54 @@ function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: num
  * Places API (New).
  */
 const PLACES_TYPES: Record<string, string[]> = {
-  bakery: ["bakery"],
-  bakkerij: ["bakery"],
-  patisserie: ["bakery", "candy_store"],
-  chocolatier: ["candy_store"],
+  bakery: ["bakery", "pastry_shop"],
+  bakkerij: ["bakery", "pastry_shop"],
+  patisserie: ["pastry_shop", "dessert_shop"],
+  chocolatier: ["chocolate_shop", "candy_store"],
   "ice cream": ["ice_cream_shop"],
   ijssalon: ["ice_cream_shop"],
-  butcher: ["grocery_store"],
-  slagerij: ["grocery_store"],
-  traiteur: ["meal_takeaway"],
-  cheese: ["grocery_store"],
-  "farm shop": ["grocery_store"],
-  hoevewinkel: ["grocery_store"],
+  butcher: ["butcher_shop"],
+  slagerij: ["butcher_shop"],
+  traiteur: ["deli"],
+  cheese: ["deli"],
+  "farm shop": ["deli"],
+  hoevewinkel: ["deli"],
   takeaway: ["meal_takeaway"],
   cafe: ["cafe"],
   convenience: ["convenience_store"],
 };
+
+/**
+ * Each request is capped at 20 results, so asking for everything at once
+ * silently loses the smaller categories. Splitting into groups gives each its
+ * own 20 slots — the difference between finding four ice-cream shops in a
+ * province and finding them in every town.
+ */
+const PLACES_GROUPS: string[][] = [
+  ["bakery", "pastry_shop"],
+  ["ice_cream_shop", "candy_store", "chocolate_shop", "dessert_shop"],
+  ["butcher_shop", "deli"],
+  ["meal_takeaway", "cafe", "convenience_store"],
+];
+
+/**
+ * Types Google rejects outright — a single one of these makes the whole
+ * request fail with INVALID_ARGUMENT, so the group builder filters against
+ * this verified list rather than trusting the category map.
+ */
+const VALID_PLACES_TYPES = new Set([
+  "bakery",
+  "pastry_shop",
+  "ice_cream_shop",
+  "candy_store",
+  "chocolate_shop",
+  "dessert_shop",
+  "butcher_shop",
+  "deli",
+  "meal_takeaway",
+  "cafe",
+  "convenience_store",
+]);
 
 export class PlacesConfigError extends Error {}
 
@@ -141,18 +173,23 @@ async function placesCandidates(
   const towns = ZONE_TOWNS[zone] ?? [];
   if (!towns.length) return [];
 
-  const types = [
-    ...new Set(
-      categories.flatMap((c) => PLACES_TYPES[c.toLowerCase()] ?? []).filter(Boolean)
-    ),
-  ];
-  if (!types.length) types.push("bakery");
+  const wanted = new Set(
+    categories
+      .flatMap((c) => PLACES_TYPES[c.toLowerCase()] ?? [])
+      .filter((t) => VALID_PLACES_TYPES.has(t))
+  );
+  if (!wanted.size) wanted.add("bakery");
+
+  const groups = PLACES_GROUPS.map((g) => g.filter((t) => wanted.has(t))).filter(
+    (g) => g.length > 0
+  );
 
   const seen = new Set<string>();
   const results: OsmCandidate[] = [];
 
   for (const town of towns) {
-    const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
+    for (const group of groups) {
+      const res = await fetch("https://places.googleapis.com/v1/places:searchNearby", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -171,7 +208,10 @@ async function placesCandidates(
         ].join(","),
       },
       body: JSON.stringify({
-        includedTypes: types,
+        // Primary type, not just "has this type" — otherwise every Delhaize and
+        // Carrefour with an in-store bakery counts as a bakery and crowds out
+        // the independent shops that actually buy vending machines.
+        includedPrimaryTypes: group,
         maxResultCount: 20,
         locationRestriction: {
           circle: {
@@ -247,19 +287,51 @@ async function placesCandidates(
         vendingDetail: null,
       });
     }
+    }
   }
 
+  // Google has no vending-machine data; OpenStreetMap does, and it is free.
+  // Cross-referencing keeps the "already a vending customer" signal even on
+  // the paid path.
+  await flagVendingFromOsm(zone, results);
+
   return results;
+}
+
+/** Marks candidates that sit on the same premises as a mapped vending machine. */
+async function flagVendingFromOsm(zone: string, candidates: OsmCandidate[]) {
+  try {
+    const machines = await vendingMachines(zone);
+    for (const c of candidates) {
+      const near = machines.find((m) => haversineKm(c, m) <= 0.05);
+      if (near) {
+        c.hasVending = true;
+        c.vendingDetail = near.operator
+          ? `${(near.vending ?? "vending").replaceAll("_", " ")} machine on site (operator: ${near.operator})`
+          : `${(near.vending ?? "vending").replaceAll("_", " ")} machine on site`;
+      }
+    }
+  } catch {
+    // Optional enrichment — never fail a paid scan because OSM was busy.
+  }
 }
 
 function placesCategory(primaryType?: string): string {
   switch (primaryType) {
     case "bakery":
       return "bakery";
+    case "pastry_shop":
+    case "dessert_shop":
+      return "patisserie";
     case "ice_cream_shop":
       return "ice cream";
     case "candy_store":
+    case "chocolate_shop":
       return "chocolatier";
+    case "butcher_shop":
+      return "butcher";
+    case "deli":
+      return "traiteur";
     case "meal_takeaway":
       return "takeaway";
     case "cafe":

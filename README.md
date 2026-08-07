@@ -31,10 +31,14 @@ Roles are `admin`, `sales`, and `reviewer`.
 
 ## The loop
 
-**Search** — pick a zone in Leads and press *Search for leads*. This queries
-OpenStreetMap town by town for bakeries, patisseries, butchers, chocolatiers,
-ice-cream shops, traiteurs, cheese shops and farm shops, plus a separate pass
-for premises that already run a vending machine. Free, no API key.
+**Search** — pick a zone in Leads and press *Search for leads*. It sweeps every
+town in the zone for bakeries, patisseries, butchers, chocolatiers, ice-cream
+shops and traiteurs, plus a pass for premises that already run a vending
+machine.
+
+With a Google Places key in Settings this takes about a minute per province and
+roughly 90% of results carry a phone number. Without one it falls back to
+OpenStreetMap: free, but slower, patchier, and only ~30% have phones.
 
 **Triage** — every new business waits for your decision. **Contact** puts it on
 the call list; **Skip** hides it. Nothing is deleted: skipped leads stay under
@@ -48,20 +52,25 @@ returns to the queue then. The next lead loads automatically.
 
 ## Things worth knowing
 
-- **Coverage builds up over several searches.** OpenStreetMap's public servers
-  throttle heavily, so one search typically covers part of a province. Search
-  the same zone again to fill the gaps — results dedupe on OSM id, so nothing
-  doubles up. Each run reports how many towns it managed.
-- **About a third of shops publish a phone number.** Those rank highest; a lead
-  you cannot dial is not yet a lead. The rest usually have a website.
+- **Google Places is the good path.** It searches by *primary* type, so
+  supermarkets with an in-store bakery are excluded and you get independent
+  shops. A West-Vlaanderen sweep returned 717 businesses in 58 seconds, 92% with
+  a phone number. Cost is roughly €1–2 per province scan.
+- **OpenStreetMap is the free fallback.** Its public servers throttle hard, so
+  one search covers part of a province — search again to fill the gaps, results
+  never duplicate. Each run reports how many towns it managed.
+- **A phone number is the most valuable signal.** Leads you can dial rank
+  highest; a lead you cannot call is not yet a lead.
 - **Businesses that already run a vending machine rank top.** They are proven
   buyers and candidates for a replacement or a second machine, so the scan
   hunts `amenity=vending_machine` deliberately and flags the operator.
 - **Marking a lead WON stops rescans finding it again**, by name and by
   proximity (`exclusionRadiusKm` in Settings).
 
-`GOOGLE_PLACES_API_KEY` remains an optional paid upgrade with far better
-coverage; leave it empty to stay on free data.
+The Places key lives in **Settings**, stored in the database — never in a
+committed file. It needs *Places API (New)* enabled on the Google Cloud project
+plus an active billing account; the legacy Places endpoints no longer work for
+projects created after March 2025.
 
 ## Scripts
 
