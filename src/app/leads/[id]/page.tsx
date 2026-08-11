@@ -1,9 +1,16 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
-import { contactLead, setLeadCompliance, skipLead, unskipLead } from "@/lib/actions";
+import {
+  contactLead,
+  markLeadWon,
+  setLeadCompliance,
+  skipLead,
+  unskipLead,
+} from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
+import { euro } from "@/lib/team-stats";
 import { idSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +25,21 @@ export default async function LeadDetailPage({
   if (!parsed.success) notFound();
   const lead = await prisma.lead.findUnique({
     where: { id: parsed.data },
-    include: { outreach: { orderBy: { createdAt: "desc" } } },
+    include: {
+      outreach: { orderBy: { createdAt: "desc" } },
+      owner: { select: { name: true } },
+      deals: {
+        where: { wonAt: { not: null } },
+        orderBy: { wonAt: "desc" },
+        select: {
+          id: true,
+          title: true,
+          wonValue: true,
+          wonAt: true,
+          owner: { select: { name: true } },
+        },
+      },
+    },
   });
   if (!lead) notFound();
   const audits = await prisma.auditEvent.findMany({
@@ -51,6 +72,11 @@ export default async function LeadDetailPage({
           <p className="text-sm text-[var(--text-dim)]">
             {[lead.address, lead.city, lead.province].filter(Boolean).join(" · ")}
           </p>
+          {lead.owner && (
+            <p className="text-sm text-[var(--text-dim)] mt-1">
+              Opgevolgd door <strong>{lead.owner.name}</strong>
+            </p>
+          )}
         </div>
         <div className="text-right space-y-2">
           <div className="score text-3xl">{lead.score}</div>
@@ -82,6 +108,61 @@ export default async function LeadDetailPage({
           <Info label="Bronversie" value={lead.sourceVersion} />
         </section>
 
+        <div className="space-y-4">
+        <section className="panel p-4 space-y-3">
+          <h2 className="label text-[var(--accent)]">Verkocht</h2>
+
+          {lead.deals.length > 0 ? (
+            <ul className="space-y-2 text-sm">
+              {lead.deals.map((deal) => (
+                <li
+                  key={deal.id}
+                  className="border-b border-[var(--border)] pb-2 last:border-0"
+                >
+                  <div className="flex justify-between gap-2">
+                    <span>{deal.title}</span>
+                    <span className="mono" style={{ color: "var(--ok)" }}>
+                      {euro(deal.wonValue ?? 0)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-[var(--text-dim)]">
+                    {deal.owner?.name ?? "onbekend"} ·{" "}
+                    {deal.wonAt?.toLocaleDateString("nl-BE")}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[var(--text-dim)]">
+              Nog niets verkocht aan deze zaak.
+            </p>
+          )}
+
+          <form action={markLeadWon} className="space-y-2">
+            <input type="hidden" name="leadId" value={lead.id} />
+            <input
+              name="title"
+              className="input"
+              placeholder="Wat is er verkocht (optioneel)"
+              maxLength={200}
+            />
+            <input
+              name="value"
+              type="number"
+              min="0"
+              step="1"
+              className="input"
+              placeholder="Bedrag in €"
+              required
+            />
+            <button className="btn btn-primary w-full">Verkoop noteren</button>
+            <p className="text-xs text-[var(--text-dim)]">
+              Maakt een klant en een verkoop op jouw naam. Telt mee voor je
+              commissie.
+            </p>
+          </form>
+        </section>
+
         <section className="panel p-4 space-y-3">
           <h2 className="label text-[var(--accent)]">Toestemming om te bellen</h2>
           <p className="text-sm">
@@ -100,6 +181,7 @@ export default async function LeadDetailPage({
             <button className="btn btn-primary w-full">Opslaan</button>
           </form>
         </section>
+        </div>
       </div>
 
       <section className="panel p-4">

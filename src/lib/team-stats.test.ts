@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  bucketByDay,
   commissionForDeal,
   commissionForDeals,
   conversionRate,
@@ -58,6 +59,44 @@ test("nobody called yet is not the same as a zero percent rate", () => {
 
 test("conversion is wins over calls", () => {
   assert.equal(conversionRate(3, 12), 0.25);
+});
+
+test("day buckets run forwards and end today", () => {
+  const now = new Date(2026, 7, 11, 15, 0, 0);
+  const buckets = bucketByDay([], 7, now);
+  assert.equal(buckets.length, 7);
+  assert.equal(buckets[6].key, "2026-08-11", "last bucket must be today");
+  assert.equal(buckets[0].key, "2026-08-05", "first bucket is six days back");
+});
+
+test("quiet days stay in the series as zero", () => {
+  // Ze weglaten zou een week stilte er hetzelfde uit laten zien als een week
+  // doorwerken.
+  const now = new Date(2026, 7, 11, 15, 0, 0);
+  const buckets = bucketByDay([new Date(2026, 7, 11, 9, 0, 0)], 3, now);
+  assert.deepEqual(
+    buckets.map((b) => b.count),
+    [0, 0, 1]
+  );
+});
+
+test("day buckets cross a month boundary", () => {
+  const now = new Date(2026, 7, 2, 12, 0, 0);
+  const buckets = bucketByDay([], 4, now);
+  assert.deepEqual(
+    buckets.map((b) => b.key),
+    ["2026-07-30", "2026-07-31", "2026-08-01", "2026-08-02"]
+  );
+});
+
+test("a late evening call counts on its own local day", () => {
+  // Via toISOString zou 23:30 lokaal in de zomertijd op morgen belanden.
+  const now = new Date(2026, 7, 11, 23, 59, 0);
+  const buckets = bucketByDay([new Date(2026, 7, 11, 23, 30, 0)], 2, now);
+  assert.deepEqual(
+    buckets.map((b) => b.count),
+    [0, 1]
+  );
 });
 
 test("ranking puts the biggest earner first and does not mutate", () => {

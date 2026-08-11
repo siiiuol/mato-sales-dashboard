@@ -80,6 +80,53 @@ export function rankByRevenue<T extends { revenue: number }>(rows: T[]): T[] {
   return [...rows].sort((a, b) => b.revenue - a.revenue);
 }
 
+/**
+ * Sleutel per kalenderdag in lokale tijd.
+ *
+ * Bewust niet via `toISOString()`: dat rekent naar UTC, waardoor een gesprek van
+ * een uur 's avonds in de Belgische zomertijd op de volgende dag zou belanden.
+ */
+function dayKey(date: Date) {
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+export type DayBucket = { key: string; label: string; count: number };
+
+/**
+ * Telt datums per dag over een aaneengesloten reeks die vandaag eindigt.
+ *
+ * Dagen zonder activiteit blijven als nul in de reeks staan. Ze weglaten zou de
+ * grafiek laten liegen: een week stilte zou dan hetzelfde beeld geven als een
+ * week doorwerken.
+ */
+export function bucketByDay(
+  dates: readonly Date[],
+  days: number,
+  now: Date = new Date()
+): DayBucket[] {
+  const counts = new Map<string, number>();
+  for (const date of dates) {
+    const key = dayKey(date);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const buckets: DayBucket[] = [];
+  for (let back = days - 1; back >= 0; back--) {
+    const day = new Date(now);
+    // setDate loopt vanzelf over maand- en jaargrenzen heen.
+    day.setDate(day.getDate() - back);
+    const key = dayKey(day);
+    buckets.push({
+      key,
+      label: `${day.getDate()}/${day.getMonth() + 1}`,
+      count: counts.get(key) ?? 0,
+    });
+  }
+  return buckets;
+}
+
 /** Euro's zoals ze in België geschreven worden. */
 export function euro(amount: number): string {
   return new Intl.NumberFormat("nl-BE", {

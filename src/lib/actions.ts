@@ -249,6 +249,87 @@ export async function unskipLead(leadId: string) {
   revalidatePath("/");
 }
 
+/**
+ * Verkocht: de lead wordt klant en er komt een deal op naam van wie hem sloot.
+ *
+ * Hier ontstaat de structuur waar de rest op steunt. De klant hangt via
+ * `Customer.leadId` aan de oorspronkelijke lead, zodat het spoor van eerste
+ * vondst tot handtekening heel blijft; de deal draagt `ownerId` en `wonValue`,
+ * en dat zijn precies de twee getallen waarmee commissie en ROI berekend worden.
+ * Documenten hangen straks aan diezelfde klant en deal.
+ */
+export async function markLeadWon(formData: FormData) {
+  const user = await requireUser(["admin", "sales"]);
+  const input = z
+    .object({
+      leadId: idSchema,
+      value: z.coerce.number().min(0).max(10_000_000),
+      title: z.string().trim().max(200).optional(),
+    })
+    .parse(formObject(formData));
+
+  const lead = await prisma.lead.findUnique({
+    where: { id: input.leadId },
+    include: { customer: true },
+  });
+  if (!lead) throw new Error("Lead niet gevonden");
+
+  const now = new Date();
+
+  // Opzettelijk hergebruikt in plaats van opnieuw aangemaakt: `Customer.leadId`
+  // is uniek, dus een tweede verkoop aan dezelfde zaak zou anders stuklopen.
+  const customer =
+    lead.customer ??
+    (await prisma.customer.create({
+      data: {
+        name: lead.name,
+        address: lead.address,
+        city: lead.city,
+        province: lead.province,
+        phone: lead.phone,
+        email: lead.email,
+        website: lead.website,
+        leadId: lead.id,
+      },
+    }));
+
+  const deal = await prisma.deal.create({
+    data: {
+      title: input.title?.trim() || `Verkoop ${lead.name}`,
+      stage: "WON",
+      leadId: lead.id,
+      customerId: customer.id,
+      ownerId: user.id,
+      wonValue: input.value,
+      wonAt: now,
+      lastActivityAt: now,
+    },
+  });
+
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: {
+      status: "WON",
+      nextActionAt: null,
+      lastTouchedAt: now,
+      claimedById: null,
+      claimedAt: null,
+      ownerId: lead.ownerId ?? user.id,
+    },
+  });
+
+  await audit(user.id, "lead.won", "lead", lead.id, {
+    dealId: deal.id,
+    value: input.value,
+  });
+
+  revalidatePath(`/leads/${lead.id}`);
+  revalidatePath("/leads");
+  revalidatePath("/calls");
+  revalidatePath("/team");
+  revalidatePath("/");
+}
+
 export async function saveSettings(formData: FormData) {
   const user = await requireUser(["admin"]);
   const categories = String(formData.get("categories") ?? "")
