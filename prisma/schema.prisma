@@ -49,9 +49,19 @@ model Lead {
   doNotContact                Boolean   @default(false)
   suppressionReason           String?
   suppressionCheckedAt        DateTime?
+
+  /// Zachte claim: wie deze zaak nú voor zich heeft in Werk. Vervalt vanzelf na
+  /// CLAIM_TTL_MINUTES, zodat een afgebroken sessie geen lead gijzelt.
+  claimedById String?
+  claimedAt   DateTime?
+  /// Blijft hangen na het eerste contact — wie deze zaak opvolgt.
+  ownerId     String?
+
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 
+  claimedBy   User?  @relation("LeadClaimedBy", fields: [claimedById], references: [id])
+  owner       User?  @relation("LeadOwner", fields: [ownerId], references: [id])
   outreach    OutreachEvent[]
   customer    Customer?
   deals       Deal[]
@@ -61,6 +71,9 @@ model Lead {
   emailDrafts EmailDraft[]
   contacts    Contact[]
   documents   GeneratedDocument[]
+
+  @@index([claimedById])
+  @@index([ownerId])
 }
 
 model OutreachEvent {
@@ -151,9 +164,16 @@ model Deal {
   grossMargin          Float?
   lossReason           String?
   lastActivityAt       DateTime?
+
+  /// Wie deze verkoop heeft binnengehaald, en voor hoeveel. Samen zijn dit de
+  /// twee getallen waar commissie en ROI op rusten.
+  ownerId              String?
+  wonValue             Float?
+
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
+  owner            User?             @relation("DealOwner", fields: [ownerId], references: [id])
   lead             Lead?             @relation(fields: [leadId], references: [id])
   customer         Customer?         @relation(fields: [customerId], references: [id])
   lines            DealLine[]
@@ -197,8 +217,25 @@ model User {
   passwordHash String
   role         String   @default("sales")
   active       Boolean  @default(true)
+
+  photoUrl    String?
+  /// Wat deze medewerker je per maand kost — de noemer onder elke ROI.
+  monthlyCost Float   @default(0)
+  /// PERCENT (deel van de dealwaarde) of FIXED (vast bedrag per verkoop).
+  commissionType  String @default("PERCENT")
+  commissionValue Float  @default(0)
+  startedAt       DateTime?
+  lastLoginAt     DateTime?
+  /// Zit in het sessietoken. Ophogen maakt alle openstaande sessies ongeldig,
+  /// zodat een gedeactiveerde medewerker er meteen uit ligt.
+  sessionVersion Int @default(0)
+
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  leadsClaimed Lead[] @relation("LeadClaimedBy")
+  leadsOwned   Lead[] @relation("LeadOwner")
+  dealsOwned   Deal[] @relation("DealOwner")
 
   tasks            Task[]
   outreach         OutreachEvent[]
@@ -660,6 +697,21 @@ model EmailDraft {
   updatedAt  DateTime  @updatedAt
 
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+}
+
+/// Aanmeldpogingen, voor snelheidsbegrenzing en om verdachte activiteit te zien.
+///
+/// Bewust in de database en niet in het geheugen: op Vercel draait elke aanvraag
+/// in een eigen instantie, dus een teller in het geheugen begrenst niets.
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  email     String
+  ip        String?
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, createdAt])
+  @@index([ip, createdAt])
 }
 
 model AuditEvent {
