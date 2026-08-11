@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { contactLead, createLead, skipLead, unskipLead } from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
-import { LEAD_STATUSES, statusLabel } from "@/lib/constants";
+import { LEAD_STATUSES, statusLabel, categoryLabel } from "@/lib/constants";
 import { FLANDERS_ZONES } from "@/lib/constants";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
@@ -10,19 +10,38 @@ import Link from "next/link";
 
 export const dynamic = "force-dynamic";
 
+type LeadFilters = {
+  province?: string;
+  status?: string;
+  category?: string;
+  city?: string;
+};
+
+function hrefWith(sp: LeadFilters, overrides: LeadFilters) {
+  const merged = { ...sp, ...overrides };
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(merged)) {
+    if (value) params.set(key, value);
+  }
+  const qs = params.toString();
+  return qs ? `/leads?${qs}` : "/leads";
+}
+
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ province?: string; status?: string }>;
+  searchParams: Promise<LeadFilters>;
 }) {
   await requirePageUser(["admin", "sales", "reviewer"]);
   const sp = await searchParams;
   const where = {
     ...(sp.province ? { province: sp.province } : {}),
     ...(sp.status ? { status: sp.status as never } : {}),
+    ...(sp.category ? { category: sp.category } : {}),
+    ...(sp.city ? { city: sp.city } : {}),
   };
 
-  const [leads, wonLeads, runs, settings] = await Promise.all([
+  const [leads, wonLeads, runs, settings, categoryRows, cityRows] = await Promise.all([
     prisma.lead.findMany({
       where,
       // Op ranking, net als de bel- en selecteerwachtrij. Met een limiet van
@@ -46,7 +65,24 @@ export default async function LeadsPage({
       update: {},
       create: { id: "default" },
     }),
+    prisma.lead.findMany({
+      where: { category: { not: null } },
+      distinct: ["category"],
+      select: { category: true },
+    }),
+    prisma.lead.findMany({
+      where: { city: { not: null } },
+      distinct: ["city"],
+      select: { city: true },
+    }),
   ]);
+
+  const categories = categoryRows
+    .map((r) => r.category!)
+    .sort((a, b) => categoryLabel(a).localeCompare(categoryLabel(b)));
+  const cities = cityRows
+    .map((r) => r.city!)
+    .sort((a, b) => a.localeCompare(b));
 
   let enabledZones: string[] = [...FLANDERS_ZONES];
   try {
@@ -99,19 +135,60 @@ export default async function LeadsPage({
       <LeadSearchPanel zones={enabledZones} />
 
       <div className="flex flex-wrap gap-2">
-        <Link href="/leads" className={`badge ${!sp.status ? "badge-live" : ""}`}>
+        <Link
+          href={hrefWith(sp, { status: undefined })}
+          className={`badge ${!sp.status ? "badge-live" : ""}`}
+        >
           alles
         </Link>
         {LEAD_STATUSES.map((s2) => (
           <Link
             key={s2}
-            href={`/leads?status=${s2}`}
+            href={hrefWith(sp, { status: s2 })}
             className={`badge ${sp.status === s2 ? "badge-live" : ""}`}
           >
             {statusLabel(s2)}
           </Link>
         ))}
       </div>
+
+      <form method="get" className="flex flex-wrap items-end gap-2">
+        {sp.status && <input type="hidden" name="status" value={sp.status} />}
+        {sp.province && <input type="hidden" name="province" value={sp.province} />}
+        <div>
+          <label className="label block mb-1">Categorie</label>
+          <select name="category" className="select" defaultValue={sp.category ?? ""}>
+            <option value="">Alle categorieën</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {categoryLabel(c)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label block mb-1">Gemeente</label>
+          <select name="city" className="select" defaultValue={sp.city ?? ""}>
+            <option value="">Alle gemeenten</option>
+            {cities.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </div>
+        <button type="submit" className="btn btn-primary">
+          Filteren
+        </button>
+        {(sp.category || sp.city) && (
+          <Link
+            href={hrefWith(sp, { category: undefined, city: undefined })}
+            className="btn btn-ghost"
+          >
+            Wis categorie/gemeente
+          </Link>
+        )}
+      </form>
 
       <section className="panel p-2 sm:p-3">
         <div className="label px-2 py-1 mb-2">
