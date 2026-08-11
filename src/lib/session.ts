@@ -10,6 +10,14 @@ export type AppRole = "admin" | "sales" | "reviewer";
 export type SessionPayload = {
   userId: string;
   role: AppRole;
+  /**
+   * Snapshot van `User.sessionVersion` op het moment van aanmelden.
+   *
+   * `getCurrentUser` vergelijkt dit met de databasewaarde, dus het ophogen van
+   * dat veld verwerpt elk bestaand token. Zonder dit blijft een gedeactiveerde
+   * medewerker tot twaalf uur lang binnen met de cookie die hij al had.
+   */
+  v: number;
 };
 
 function key() {
@@ -38,11 +46,16 @@ export async function verifySessionToken(token?: string) {
     const { payload } = await jwtVerify(token, key(), { algorithms: ["HS256"] });
     if (
       typeof payload.userId !== "string" ||
+      typeof payload.v !== "number" ||
       !["admin", "sales", "reviewer"].includes(String(payload.role))
     ) {
       return null;
     }
-    return { userId: payload.userId, role: payload.role as AppRole };
+    return {
+      userId: payload.userId,
+      role: payload.role as AppRole,
+      v: payload.v,
+    };
   } catch {
     return null;
   }

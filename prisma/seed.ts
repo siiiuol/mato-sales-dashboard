@@ -6,16 +6,27 @@ const prisma = new PrismaClient();
 async function main() {
   const adminEmail = (process.env.MATO_ADMIN_EMAIL || "admin@mato.local").toLowerCase();
   const configuredHash = process.env.MATO_ADMIN_PASSWORD_HASH;
+  const configuredPassword = process.env.MATO_ADMIN_PASSWORD;
+
+  // Het ontwikkelwachtwoord staat in de README en dus feitelijk op straat.
+  // Buiten development moet er een echt wachtwoord gezet zijn, anders zou een
+  // productie-omgeving met een publiek bekende login online komen te staan.
+  if (!configuredHash && !configuredPassword && process.env.NODE_ENV === "production") {
+    throw new Error(
+      "Zet MATO_ADMIN_PASSWORD_HASH of MATO_ADMIN_PASSWORD voordat je in productie seedt — " +
+        "het ontwikkelwachtwoord uit de README is publiek bekend."
+    );
+  }
+
   const passwordHash =
-    configuredHash ||
-    (await hash(process.env.MATO_ADMIN_PASSWORD || "mato-admin-dev", 12));
+    configuredHash || (await hash(configuredPassword || "mato-admin-dev", 12));
   await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
       name: process.env.MATO_ADMIN_NAME || "MATO Admin",
       role: "admin",
       active: true,
-      ...(configuredHash || process.env.MATO_ADMIN_PASSWORD ? { passwordHash } : {}),
+      ...(configuredHash || configuredPassword ? { passwordHash } : {}),
     },
     create: {
       email: adminEmail,

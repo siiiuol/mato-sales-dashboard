@@ -26,10 +26,27 @@ export const getCurrentUser = cache(async () => {
 
   const user = await prisma.user.findFirst({
     where: { id: session.userId, active: true },
-    select: { id: true, name: true, email: true, role: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      photoUrl: true,
+      sessionVersion: true,
+    },
   });
-  if (!user || user.role !== session.role) return null;
-  return { ...user, role: user.role as AppRole };
+  // Rol én versie moeten kloppen: een token blijft anders geldig nadat een
+  // medewerker gedegradeerd of gedeactiveerd is.
+  if (!user || user.role !== session.role || user.sessionVersion !== session.v) {
+    return null;
+  }
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    photoUrl: user.photoUrl,
+    role: user.role as AppRole,
+  };
 });
 
 export async function requireUser(roles?: readonly AppRole[]) {
