@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { apiError, requireUser } from "@/lib/dal";
-import { claimFilter } from "@/lib/claims";
+import { workableByMe } from "@/lib/claims";
 
 export async function GET() {
   try {
@@ -18,9 +18,9 @@ export async function GET() {
         AND: [
           { OR: [{ nextActionAt: { lte: endOfDay } }, { nextActionAt: null }] },
           // Dezelfde uitsluiting als de wachtrij op de startpagina; die twee
-          // moeten het eens zijn, anders duikt een geclaimde lead na het
+          // moeten het eens zijn, anders duikt een lead van een collega na het
           // verversen alsnog op.
-          claimFilter(user.id, now),
+          ...workableByMe(user.id, now),
         ],
       },
       orderBy: [

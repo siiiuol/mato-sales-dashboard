@@ -53,3 +53,27 @@ export function claimableWhere(leadId: string, userId: string, now: Date = new D
     ...claimFilter(userId, now),
   };
 }
+
+/**
+ * Prisma-filter voor "staat niet op naam van een collega".
+ *
+ * Eigenaarschap is blijvend en de claim niet. Dit is het verschil tussen "iemand
+ * kijkt er nu naar" en "dit is zijn zaak" — en het tweede is wat de commissie
+ * beschermt. Zonder dit filter zou de wachtrij van een collega je toegewezen
+ * leads gewoon weer aanbieden.
+ */
+export function ownerFilter(userId: string) {
+  return {
+    OR: [{ ownerId: null }, { ownerId: userId }],
+  };
+}
+
+/**
+ * Alles bij elkaar: leads waar jij aan mag werken.
+ *
+ * Bedoeld om in een `AND` te zetten. Beide voorwaarden moeten gelden — een
+ * onbezette lead waar een collega nu naar kijkt is even goed bezet.
+ */
+export function workableByMe(userId: string, now: Date = new Date()) {
+  return [claimFilter(userId, now), ownerFilter(userId)];
+}

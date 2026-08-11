@@ -21,8 +21,12 @@ async function getSettings() {
   });
 }
 
+/**
+ * Alleen de beheerder mag zoeken: elke scan kost geld bij Google Places.
+ * Medewerkers werken de gevonden lijst af, ze vullen hem niet aan.
+ */
 export async function scanZone(zone: string) {
-  await requireUser(["admin", "sales", "reviewer"]);
+  await requireUser(["admin"]);
   if (!FLANDERS_ZONES.includes(zone as (typeof FLANDERS_ZONES)[number])) {
     throw new Error("Ongeldige zone");
   }
@@ -53,6 +57,104 @@ export async function claimLead(leadId: string): Promise<boolean> {
     data: { claimedById: user.id, claimedAt: new Date() },
   });
   return count === 1;
+}
+
+/**
+ * Zet deze zaak blijvend op jouw naam.
+ *
+ * Dit is wat commissie beschermt, en daarom is het geen zachte claim die na een
+ * half uur vervalt: zolang de lead van jou is kan een collega hem niet
+ * overnemen, ook niet als je er een week niet naar kijkt.
+ *
+ * De voorwaarde staat in de `where` van een `updateMany`, zodat twee mensen die
+ * tegelijk op de knop drukken niet allebei kunnen slagen. Wie verliest krijgt
+ * te zien wie er wél eigenaar is.
+ */
+export async function takeLead(leadId: string) {
+  const user = await requireUser(["admin", "sales"]);
+  const id = idSchema.parse(leadId);
+
+  const { count } = await prisma.lead.updateMany({
+    where: { id, OR: [{ ownerId: null }, { ownerId: user.id }] },
+    data: { ownerId: user.id, ownedAt: new Date() },
+  });
+
+  if (count !== 1) {
+    const lead = await prisma.lead.findUnique({
+      where: { id },
+      select: { owner: { select: { name: true } } },
+    });
+    throw new Error(
+      lead?.owner
+        ? `${lead.owner.name} werkt al aan deze lead`
+        : "Deze lead is net door iemand anders opgepakt"
+    );
+  }
+
+  await audit(user.id, "lead.taken", "lead", id);
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
+  revalidatePath("/mijn-leads");
+  revalidatePath("/");
+}
+
+/** Terug in de gedeelde pot. De eigenaar zelf of de beheerder mag dit. */
+export async function releaseLead(leadId: string) {
+  const user = await requireUser(["admin", "sales"]);
+  const id = idSchema.parse(leadId);
+
+  const lead = await prisma.lead.findUnique({
+    where: { id },
+    select: { ownerId: true, owner: { select: { name: true } } },
+  });
+  if (!lead) throw new Error("Lead niet gevonden");
+  if (lead.ownerId && lead.ownerId !== user.id && user.role !== "admin") {
+    throw new Error(`Deze lead staat op naam van ${lead.owner?.name ?? "een collega"}`);
+  }
+
+  await prisma.lead.update({
+    where: { id },
+    data: { ownerId: null, ownedAt: null, claimedById: null, claimedAt: null },
+  });
+
+  await audit(user.id, "lead.released", "lead", id, { previousOwner: lead.ownerId });
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${id}`);
+  revalidatePath("/mijn-leads");
+  revalidatePath("/");
+}
+
+/** De beheerder wijst een lead toe aan iemand anders. */
+export async function reassignLead(formData: FormData) {
+  const admin = await requireUser(["admin"]);
+  const input = z
+    .object({ leadId: idSchema, userId: z.string().cuid().or(z.literal("")) })
+    .parse(formObject(formData));
+
+  const target = input.userId
+    ? await prisma.user.findFirst({
+        where: { id: input.userId, active: true },
+        select: { id: true },
+      })
+    : null;
+  if (input.userId && !target) throw new Error("Medewerker niet gevonden");
+
+  await prisma.lead.update({
+    where: { id: input.leadId },
+    data: {
+      ownerId: target?.id ?? null,
+      ownedAt: target ? new Date() : null,
+      claimedById: null,
+      claimedAt: null,
+    },
+  });
+
+  await audit(admin.id, "lead.reassigned", "lead", input.leadId, {
+    to: target?.id ?? null,
+  });
+  revalidatePath("/leads");
+  revalidatePath(`/leads/${input.leadId}`);
+  revalidatePath("/mijn-leads");
 }
 
 export async function logCall(formData: FormData) {
@@ -110,9 +212,11 @@ export async function logCall(formData: FormData) {
       // hangen op naam van wie er toevallig het laatst naar keek.
       claimedById: null,
       claimedAt: null,
-      // Eigenaar blijft wie er als eerste belde, zodat opvolging bij dezelfde
-      // persoon terechtkomt en de klant niet elke keer een andere stem krijgt.
+      // Wie belt, krijgt de zaak op zijn naam. Bellen ís het werk claimen, en
+      // een lead die je gebeld hebt zonder eigenaar zou een collega zo kunnen
+      // overnemen inclusief de commissie.
       ownerId: lead.ownerId ?? user.id,
+      ...(lead.ownerId ? {} : { ownedAt: new Date() }),
     },
   });
   await audit(user.id, "call.logged", "lead", leadId, { outcome });

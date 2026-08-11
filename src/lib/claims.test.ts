@@ -4,7 +4,9 @@ import {
   CLAIM_TTL_MINUTES,
   claimFilter,
   claimableWhere,
+  ownerFilter,
   staleClaimCutoff,
+  workableByMe,
 } from "./claims";
 
 const NOW = new Date("2026-08-11T12:00:00.000Z");
@@ -54,4 +56,26 @@ test("the claim guard is scoped to one lead", () => {
   const where = claimableWhere("lead-1", ME, NOW);
   assert.equal(where.id, "lead-1");
   assert.ok(Array.isArray(where.OR));
+});
+
+test("an unowned lead is available, and so is my own", () => {
+  const filter = ownerFilter(ME);
+  assert.ok(filter.OR.some((c) => c.ownerId === null));
+  assert.ok(filter.OR.some((c) => c.ownerId === ME));
+});
+
+test("a colleague's lead matches neither branch", () => {
+  // Dit is wat commissie beschermt: eigenaarschap vervalt niet, in
+  // tegenstelling tot de claim.
+  const filter = ownerFilter(ME);
+  const theirs = "user-other";
+  assert.ok(!filter.OR.some((c) => c.ownerId === theirs));
+});
+
+test("workable means unclaimed AND unowned, not either one", () => {
+  // Als deze twee met OR gecombineerd zouden worden, zou een lead van een
+  // collega alsnog opduiken zodra niemand er toevallig naar keek.
+  const conditions = workableByMe(ME, NOW);
+  assert.equal(conditions.length, 2);
+  assert.ok(conditions.every((c) => Array.isArray(c.OR)));
 });

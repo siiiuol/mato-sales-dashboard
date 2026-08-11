@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
-import { claimFilter } from "@/lib/claims";
+import { workableByMe } from "@/lib/claims";
 import { WorkMode } from "@/components/WorkMode";
 
 export const dynamic = "force-dynamic";
@@ -35,10 +35,10 @@ export default async function HomePage() {
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
 
-  // Zaken die een collega op dit moment voor zich heeft, blijven uit je
-  // wachtrij. Zonder dit krijgen twee mensen die tegelijk beginnen dezelfde
-  // bovenste lead en belt de zaak twee keer.
-  const mine = claimFilter(user.id, now);
+  // Twee dingen houden een zaak uit je wachtrij: een collega die er nu naar
+  // kijkt, en een collega op wiens naam hij staat. Het eerste voorkomt dubbel
+  // bellen, het tweede beschermt zijn commissie.
+  const mine = workableByMe(user.id, now);
 
   const [triageLeads, callLeads, clearedToday] = await Promise.all([
     // Freshly found, not yet decided on. Businesses already running a machine
@@ -48,7 +48,7 @@ export default async function HomePage() {
         doNotContact: false,
         complianceStatus: "PENDING",
         status: "NEW",
-        AND: [mine],
+        AND: mine,
       },
       orderBy: [{ hasVending: "desc" }, { score: "desc" }, { createdAt: "desc" }],
       take: 40,
@@ -61,7 +61,7 @@ export default async function HomePage() {
         status: { in: ["NEW", "TO_CALL", "FOLLOW_UP", "CONTACTED"] },
         AND: [
           { OR: [{ nextActionAt: { lte: now } }, { nextActionAt: null }] },
-          mine,
+          ...mine,
         ],
       },
       orderBy: [

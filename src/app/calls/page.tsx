@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 import { logCall } from "@/lib/actions";
 import { CALL_OUTCOMES, statusLabel } from "@/lib/constants";
 import { requirePageUser } from "@/lib/dal";
-import { claimFilter } from "@/lib/claims";
+import { workableByMe } from "@/lib/claims";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +24,7 @@ export default async function CallsPage({
       },
       doNotContact: false,
       complianceStatus: "CLEARED",
-      AND: [claimFilter(user.id, now)],
+      AND: workableByMe(user.id, now),
     },
     orderBy: [
       // Zaken met een automaat eerst — bewezen kopers, zoals in Werk.

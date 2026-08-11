@@ -1,6 +1,14 @@
 import { prisma } from "@/lib/db";
-import { contactLead, createLead, skipLead, unskipLead } from "@/lib/actions";
+import {
+  contactLead,
+  createLead,
+  releaseLead,
+  skipLead,
+  takeLead,
+  unskipLead,
+} from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
+import { OwnerButton } from "@/components/OwnerButton";
 import { LEAD_STATUSES, statusLabel, categoryLabel } from "@/lib/constants";
 import { FLANDERS_ZONES } from "@/lib/constants";
 import { LeadsMap } from "@/components/LeadsMap";
@@ -32,7 +40,7 @@ export default async function LeadsPage({
 }: {
   searchParams: Promise<LeadFilters>;
 }) {
-  await requirePageUser(["admin", "sales", "reviewer"]);
+  const user = await requirePageUser(["admin", "sales", "reviewer"]);
   const sp = await searchParams;
   const where = {
     ...(sp.province ? { province: sp.province } : {}),
@@ -58,6 +66,7 @@ export default async function LeadsPage({
         { createdAt: "desc" },
       ],
       take: 200,
+      include: { owner: { select: { id: true, name: true } } },
     }),
     prisma.lead.findMany({
       where: { status: "WON", lat: { not: null }, lng: { not: null } },
@@ -212,13 +221,14 @@ export default async function LeadsPage({
                 <th>Zone</th>
                 <th>Telefoon</th>
                 <th>Status</th>
+                <th>Van wie</th>
                 <th>Actie</th>
               </tr>
             </thead>
             <tbody>
               {leads.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-[var(--text-dim)] text-sm py-6">
+                  <td colSpan={7} className="text-[var(--text-dim)] text-sm py-6">
                     Nog geen leads. Klik hierboven op Leads zoeken om zaken in deze lijst
                     en op de kaart te krijgen.
                   </td>
@@ -263,6 +273,18 @@ export default async function LeadsPage({
                   </td>
                   <td>
                     <span className="badge">{statusLabel(l.status)}</span>
+                  </td>
+                  <td>
+                    <OwnerButton
+                      leadId={l.id}
+                      ownerId={l.ownerId}
+                      ownerName={l.owner?.name ?? null}
+                      currentUserId={user.id}
+                      isAdmin={user.role === "admin"}
+                      takeAction={takeLead}
+                      releaseAction={releaseLead}
+                      compact
+                    />
                   </td>
                   <td>
                     <TriageButtons

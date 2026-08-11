@@ -4,11 +4,14 @@ import { requirePageUser } from "@/lib/dal";
 import {
   contactLead,
   markLeadWon,
+  releaseLead,
   setLeadCompliance,
   skipLead,
+  takeLead,
   unskipLead,
 } from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
+import { OwnerButton } from "@/components/OwnerButton";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
 import { idSchema } from "@/lib/validation";
@@ -20,14 +23,14 @@ export default async function LeadDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  await requirePageUser(["admin", "sales", "reviewer"]);
+  const user = await requirePageUser(["admin", "sales", "reviewer"]);
   const parsed = idSchema.safeParse((await params).id);
   if (!parsed.success) notFound();
   const lead = await prisma.lead.findUnique({
     where: { id: parsed.data },
     include: {
       outreach: { orderBy: { createdAt: "desc" } },
-      owner: { select: { name: true } },
+      owner: { select: { id: true, name: true } },
       deals: {
         where: { wonAt: { not: null } },
         orderBy: { wonAt: "desc" },
@@ -73,8 +76,16 @@ export default async function LeadDetailPage({
             {[lead.address, lead.city, lead.province].filter(Boolean).join(" · ")}
           </p>
           {lead.owner && (
-            <p className="text-sm text-[var(--text-dim)] mt-1">
-              Opgevolgd door <strong>{lead.owner.name}</strong>
+            <p className="text-sm mt-1">
+              {lead.owner.id === user.id ? (
+                <span className="text-[var(--accent)]">
+                  Deze lead staat op <strong>jouw</strong> naam
+                </span>
+              ) : (
+                <span className="text-[var(--text-dim)]">
+                  <strong>{lead.owner.name}</strong> werkt aan deze lead
+                </span>
+              )}
             </p>
           )}
         </div>
@@ -84,6 +95,15 @@ export default async function LeadDetailPage({
             <span className="badge">{statusLabel(lead.status)}</span>
             {lead.hasVending && <span className="badge badge-live ml-2">Heeft automaat</span>}
           </div>
+          <OwnerButton
+            leadId={lead.id}
+            ownerId={lead.ownerId}
+            ownerName={lead.owner?.name ?? null}
+            currentUserId={user.id}
+            isAdmin={user.role === "admin"}
+            takeAction={takeLead}
+            releaseAction={releaseLead}
+          />
           <TriageButtons
             leadId={lead.id}
             status={lead.status}

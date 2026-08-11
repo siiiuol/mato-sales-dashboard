@@ -1,5 +1,6 @@
 export const NAV = [
   { href: "/", label: "Werk" },
+  { href: "/mijn-leads", label: "Mijn leads" },
   { href: "/leads", label: "Leads" },
   { href: "/calls", label: "Bellen" },
 ] as const;

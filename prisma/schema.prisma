@@ -63,8 +63,10 @@ model Lead {
   /// CLAIM_TTL_MINUTES, zodat een afgebroken sessie geen lead gijzelt.
   claimedById String?
   claimedAt   DateTime?
-  /// Blijft hangen na het eerste contact — wie deze zaak opvolgt.
+  /// Wie deze zaak op zijn naam heeft staan. Blijft staan tot hij vrijgegeven
+  /// of door de beheerder toegewezen wordt — een collega kan hem niet overnemen.
   ownerId     String?
+  ownedAt     DateTime?
 
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
