@@ -28,6 +28,11 @@ model Lead {
   source                      String    @default("lead_bot")
   sourceVersion               String?
   score                       Int       @default(0)
+  /// Aantal beoordelingen bij de vondst — de maat voor "grotere zaak".
+  ///
+  /// Werd eerder alleen tijdens het scoren gebruikt en daarna weggegooid, waardoor
+  /// het signaal bij elke herberekening verdween en scores stilletjes zakten.
+  reviewCount                 Int       @default(0)
   timingScore                 Int       @default(0)
   distanceKm                  Float?
   tier                        String?
@@ -41,6 +46,10 @@ model Lead {
   outreachPrep                String?
   hasVending                  Boolean   @default(false)
   vendingDetail               String?
+  /// Automaten binnen loopafstand die niet van deze zaak zijn — de buren zijn al om.
+  nearbyVending               Int       @default(0)
+  /// Verkoopt eten om mee te nemen: portioneert en verpakt al voor onderweg.
+  sellsTakeaway               Boolean   @default(false)
   status                      String    @default("NEW")
   nextActionAt                DateTime?
   lastTouchedAt               DateTime?
@@ -732,7 +741,8 @@ model AppSettings {
   currency            String @default("EUR")
   timezone            String @default("Europe/Brussels")
   placesApiKey        String @default("")
-  detectionCategories String @default("[\"bakery\",\"butcher\",\"patisserie\",\"traiteur\",\"chocolatier\",\"florist\",\"farm shop\"]")
+  /// Moet gelijk lopen met DEFAULT_DETECTION_CATEGORIES in src/lib/constants.ts.
+  detectionCategories String @default("[\"bakery\",\"patisserie\",\"butcher\",\"chocolatier\",\"ice cream\",\"traiteur\",\"cheese\",\"farm shop\",\"takeaway\"]")
   enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")
   exclusionRadiusKm   Float  @default(0.5)
   pitchTemplates      String @default("{}")

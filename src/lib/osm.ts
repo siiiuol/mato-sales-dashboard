@@ -1,4 +1,8 @@
-import { ZONE_BBOX, ZONE_TOWNS } from "./constants";
+import {
+  DEFAULT_DETECTION_CATEGORIES,
+  ZONE_BBOX,
+  ZONE_TOWNS,
+} from "./constants";
 
 /**
  * Lead discovery over OpenStreetMap via Overpass.
@@ -79,24 +83,33 @@ const CATEGORY_TAGS: Record<string, Array<[string, string]>> = {
 };
 
 /**
- * Default scan set: businesses that sell physical product a customer collects.
- *
- * Restaurants and cafes are deliberately excluded. They are weak vending
- * prospects and there are an order of magnitude more of them — including them
- * flooded the per-tile result cap and evicted the specialist shops that matter
- * (a scan returned 368 takeaways against 8 patisseries, and lost a real
- * ice-cream shop in Roeselare as a result). They remain selectable in Settings.
+ * Afhaalzaken staan sinds Stage B in de standaardlijst. Ze waren uitgesloten
+ * omdat ze de specialisten verdrongen — één scan gaf 368 afhaalzaken tegen 8
+ * patisserieën — maar dat kwam niet doordat het slechte prospecten zijn: alle
+ * categorieën deelden één Overpass-vraag met één resultaatplafond, en de
+ * talrijkste won. Nu heeft elke volumeklasse zijn eigen vraag met zijn eigen
+ * plafond, dus afhaal kan niets meer wegdrukken. Zie `HIGH_VOLUME_CATEGORIES`.
  */
-const DEFAULT_CATEGORIES = [
-  "bakery",
-  "patisserie",
-  "butcher",
-  "chocolatier",
-  "ice cream",
-  "traiteur",
-  "cheese",
-  "farm shop",
-];
+const DEFAULT_CATEGORIES = [...DEFAULT_DETECTION_CATEGORIES];
+
+/**
+ * Categorieën die de specialisten in aantal ver overtreffen.
+ *
+ * Ze krijgen een eigen Overpass-vraag met een eigen plafond. Zonder die
+ * scheiding vult één drukke stad het plafond met frituren en verdwijnt de
+ * patisserie die je juist zocht — precies de fout die De Zoete Zonde in
+ * Roeselare eerder kostte.
+ */
+const HIGH_VOLUME_CATEGORIES = new Set([
+  "takeaway",
+  "cafe",
+  "restaurant",
+  "convenience",
+]);
+
+/** Resultaatplafond per gemeente, per volumeklasse. */
+export const SPECIALIST_CAP = 1000;
+export const HIGH_VOLUME_CAP = 200;
 
 /** vending=* values worth hunting — these signal food/drink retail automation. */
 const VENDING_VALUES = [
@@ -129,6 +142,10 @@ export type OsmCandidate = {
   reviewCount: number;
   hasVending: boolean;
   vendingDetail: string | null;
+  /** Verkoopt eten om mee te nemen — al verpakt per portie, dus makkelijk uit te breiden. */
+  sellsTakeaway: boolean;
+  /** Automaten in de buurt die niet op dit adres staan: de concurrent is er al. */
+  nearbyVending: number;
 };
 
 type OverpassElement = {
@@ -197,6 +214,38 @@ export function tagsForCategories(categories: string[]): Array<[string, string[]
   // Never scan for nothing.
   if (byKey.size === 0) byKey.set("shop", new Set(["bakery"]));
   return [...byKey.entries()].map(([key, values]) => [key, [...values]]);
+}
+
+export type QueryStep = { pairs: Array<[string, string[]]>; cap: number };
+
+/**
+ * Verdeelt de gevraagde categorieën over aparte Overpass-vragen per
+ * volumeklasse.
+ *
+ * Er komt alleen een tweede vraag als er ook werkelijk een talrijke categorie
+ * gevraagd is. Bij de standaardselectie zonder afhaal blijft het dus bij één
+ * vraag per gemeente en verandert er niets aan de belasting.
+ */
+export function queryPlan(categories: string[]): QueryStep[] {
+  const specialist = categories.filter(
+    (c) => !HIGH_VOLUME_CATEGORIES.has(c.toLowerCase())
+  );
+  const highVolume = categories.filter((c) =>
+    HIGH_VOLUME_CATEGORIES.has(c.toLowerCase())
+  );
+
+  const steps: QueryStep[] = [];
+  if (specialist.length) {
+    steps.push({ pairs: tagsForCategories(specialist), cap: SPECIALIST_CAP });
+  }
+  if (highVolume.length) {
+    steps.push({ pairs: tagsForCategories(highVolume), cap: HIGH_VOLUME_CAP });
+  }
+  // Nooit naar niets zoeken.
+  if (!steps.length) {
+    steps.push({ pairs: tagsForCategories([]), cap: SPECIALIST_CAP });
+  }
+  return steps;
 }
 
 function unionFor(groups: Array<[string, string[]]>, bbox: string) {
@@ -286,7 +335,26 @@ function normalizeElement(
     reviewCount: 0,
     hasVending: false,
     vendingDetail: null,
+    sellsTakeaway: sellsTakeaway(tags),
+    nearbyVending: 0,
   };
+}
+
+/**
+ * Verkoopt deze zaak eten om mee te nemen?
+ *
+ * Het interessante geval is niet de frituur — die staat er al om bekend — maar
+ * de bakker of slager met `takeaway=yes`: die portioneert en verpakt al voor
+ * onderweg, en dat is precies wat een automaat verkoopt.
+ *
+ * `takeaway=only` telt mee, `takeaway=no` niet; dat laatste is een uitdrukkelijk
+ * "nee" van de kaartenmaker en geen ontbrekende gegevens.
+ */
+export function sellsTakeaway(tags: Record<string, string>): boolean {
+  const value = (tags.takeaway || "").toLowerCase();
+  if (value === "yes" || value === "only") return true;
+  if (value === "no") return false;
+  return (tags.amenity || "").toLowerCase() === "fast_food";
 }
 
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
@@ -368,6 +436,63 @@ function describeVending(v: VendingPoint) {
   return vendingLabel(v.vending, v.operator);
 }
 
+/** Tot hier hoort een automaat bij de zaak zelf en niet bij de buren. */
+export const OWN_PREMISES_KM = 0.05;
+
+/**
+ * Straal waarbinnen een andere automaat als concurrentie telt.
+ *
+ * Anderhalve kilometer: ver genoeg om in een landelijke gemeente de volgende
+ * dorpskern mee te nemen, dicht genoeg dat het over dezelfde klanten gaat. Wie
+ * hier veel te ruim kiest, meet de bevolkingsdichtheid in plaats van de
+ * concurrentie.
+ */
+export const COMPETITOR_RADIUS_KM = 1.5;
+
+/**
+ * Hoeveel automaten er om deze zaak heen staan die niet van haarzelf zijn.
+ *
+ * Dit is het beste koopargument dat er is: de buren hebben er al een. Vandaar
+ * dat de automaat op het eigen adres er expliciet buiten valt — die meetellen
+ * zou elke zaak mét automaat ook een concurrentiescore geven, en dan meet het
+ * signaal zichzelf.
+ */
+export function countNearbyVending(
+  at: { lat: number; lng: number },
+  machines: readonly VendingPoint[],
+  radiusKm: number = COMPETITOR_RADIUS_KM
+): number {
+  let count = 0;
+  for (const machine of machines) {
+    const km = haversineKm(at, machine);
+    if (km > OWN_PREMISES_KM && km <= radiusKm) count++;
+  }
+  return count;
+}
+
+/**
+ * Zet de automaatsignalen op alle kandidaten in één doorloop.
+ *
+ * Gedeeld door de gratis en de betaalde zoekweg, zodat een lead dezelfde score
+ * krijgt ongeacht waar hij vandaan komt.
+ */
+export function applyVendingSignals(
+  candidates: OsmCandidate[],
+  machines: readonly VendingPoint[]
+) {
+  if (!machines.length) return;
+  for (const candidate of candidates) {
+    const own = machines.find(
+      (m) => haversineKm(candidate, m) <= OWN_PREMISES_KM
+    );
+    if (own) {
+      candidate.hasVending = true;
+      candidate.vendingDetail = describeVending(own);
+    }
+    candidate.nearbyVending = countNearbyVending(candidate, machines);
+  }
+}
+
 export type ScanResult = {
   candidates: OsmCandidate[];
   townsTotal: number;
@@ -395,7 +520,7 @@ export async function scanZoneCandidates(
   }
 
   const cats = categories.length ? categories : DEFAULT_CATEGORIES;
-  const pairs = tagsForCategories(cats);
+  const plan = queryPlan(cats);
   const fallbackCategory = cats[0] ?? "bakery";
 
   const seen = new Set<string>();
@@ -412,20 +537,24 @@ export async function scanZoneCandidates(
       if (index >= queue.length) return;
       if (Date.now() > deadline) return;
       const town = queue[index];
-      const box = boxAround(town.lat, town.lng, TOWN_RADIUS_KM);
-      const union = unionFor(pairs, bboxStr(box));
-      const ql = `[out:json][timeout:45];\n(\n${union}\n);\nout center 1000;`;
+      const box = bboxStr(boxAround(town.lat, town.lng, TOWN_RADIUS_KM));
       try {
-        const elements = await overpassQuery(ql, workerIndex);
-        townsOk++;
-        for (const el of elements) {
-          const candidate = normalizeElement(el, zone, fallbackCategory);
-          if (!candidate || seen.has(candidate.placeId)) continue;
-          // Towns overlap; keep the first town that found it as a hint only.
-          if (!candidate.city) candidate.city = town.name;
-          seen.add(candidate.placeId);
-          results.push(candidate);
+        // Eén vraag per volumeklasse, elk met een eigen plafond. Samen in één
+        // vraag zou de talrijkste klasse het plafond vullen en de andere
+        // wegdrukken.
+        for (const step of plan) {
+          const ql = `[out:json][timeout:45];\n(\n${unionFor(step.pairs, box)}\n);\nout center ${step.cap};`;
+          const elements = await overpassQuery(ql, workerIndex);
+          for (const el of elements) {
+            const candidate = normalizeElement(el, zone, fallbackCategory);
+            if (!candidate || seen.has(candidate.placeId)) continue;
+            // Towns overlap; keep the first town that found it as a hint only.
+            if (!candidate.city) candidate.city = town.name;
+            seen.add(candidate.placeId);
+            results.push(candidate);
+          }
         }
+        townsOk++;
       } catch {
         // A dead town costs coverage, not the whole scan.
         townsFailed.push(town.name);
@@ -457,19 +586,8 @@ export async function scanZoneCandidates(
     throw new Error("OpenStreetMap gaf niets terug — probeer straks opnieuw");
   }
 
-  // Flag businesses that already run a machine.
-  const machines = await vendingMachines(zone);
-  if (machines.length) {
-    for (const candidate of results) {
-      const near = machines.find(
-        (m) => haversineKm(candidate, m) <= 0.05 // ~50 m: same premises
-      );
-      if (near) {
-        candidate.hasVending = true;
-        candidate.vendingDetail = describeVending(near);
-      }
-    }
-  }
+  // Wie al een automaat heeft, en wie er een in de straat heeft staan.
+  applyVendingSignals(results, await vendingMachines(zone));
 
   return {
     candidates: results,

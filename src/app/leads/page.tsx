@@ -47,9 +47,14 @@ export default async function LeadsPage({
       // Op ranking, net als de bel- en selecteerwachtrij. Met een limiet van
       // 200 op ruim duizend leads bepaalt deze volgorde wélke je te zien
       // krijgt: de beste, niet toevallig de laatst gevondene.
+      //
+      // De score bevat het buurtsignaal al; hier staat het er alleen als
+      // gelijkspelbreker bij, zodat twee zaken met dezelfde score op volgorde
+      // van bewijs staan en niet op datum.
       orderBy: [
         { hasVending: "desc" },
         { score: "desc" },
+        { nearbyVending: "desc" },
         { createdAt: "desc" },
       ],
       take: 200,
@@ -232,9 +237,19 @@ export default async function LeadsPage({
                     <div className="text-xs text-[var(--text-dim)]">
                       {l.city ? `${l.city} · ` : ""}{l.reason}
                     </div>
-                    {l.hasVending && (
-                      <span className="badge badge-live mt-1">Heeft automaat</span>
-                    )}
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {l.hasVending && (
+                        <span className="badge badge-live">Heeft automaat</span>
+                      )}
+                      {l.nearbyVending > 0 && (
+                        <span className="badge" title="Automaten binnen 1,5 km die niet van deze zaak zijn">
+                          {l.nearbyVending === 1
+                            ? "Buur heeft automaat"
+                            : `${l.nearbyVending} automaten in de buurt`}
+                        </span>
+                      )}
+                      {l.sellsTakeaway && <span className="badge">Afhaal</span>}
+                    </div>
                   </td>
                   <td className="text-sm">{l.province ?? "—"}</td>
                   <td className="mono text-xs">

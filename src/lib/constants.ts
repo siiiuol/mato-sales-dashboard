@@ -37,6 +37,30 @@ export const WORK_STEPS = [
   { id: "log", code: "3", label: "Noteren" },
 ] as const;
 
+/**
+ * Wat er standaard doorzocht wordt — de enige echte lijst.
+ *
+ * Stond eerder op drie plaatsen los van elkaar (osm.ts, de seed en de
+ * standaardwaarde in het schema) en die liepen uiteen: de opgeslagen instelling
+ * miste "ice cream" en "cheese", en omdat een ingevulde instelling wint boven
+ * de scanstandaard werden ijssalons in het geheel niet meer gezocht. Precies de
+ * categorie waar het ooit over ging.
+ *
+ * De standaardwaarde in `schema.prisma` moet hiermee overeenkomen; die kan geen
+ * TypeScript importeren.
+ */
+export const DEFAULT_DETECTION_CATEGORIES = [
+  "bakery",
+  "patisserie",
+  "butcher",
+  "chocolatier",
+  "ice cream",
+  "traiteur",
+  "cheese",
+  "farm shop",
+  "takeaway",
+] as const;
+
 export const FLANDERS_ZONES = [
   "Antwerpen",
   "Oost-Vlaanderen",

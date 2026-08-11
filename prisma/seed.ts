@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
+import { DEFAULT_DETECTION_CATEGORIES } from "../src/lib/constants";
 
 const prisma = new PrismaClient();
 
@@ -36,34 +37,21 @@ async function main() {
     },
   });
 
+  const categories = JSON.stringify([...DEFAULT_DETECTION_CATEGORIES]);
+
   await prisma.appSettings.upsert({
     where: { id: "default" },
-    update: {
-      detectionCategories: JSON.stringify([
-        "bakery",
-        "butcher",
-        "patisserie",
-        "traiteur",
-        "chocolatier",
-        "florist",
-        "farm shop",
-      ]),
-    },
+    // Bewust niet meer overschreven bij elke seed: dit veld is instelbaar in de
+    // app, en het terugzetten naar de standaard maakte een keuze van de
+    // gebruiker stilzwijgend ongedaan.
+    update: {},
     create: {
       id: "default",
       businessName: "MATO",
       currency: "EUR",
       timezone: "Europe/Brussels",
       accent: "green",
-      detectionCategories: JSON.stringify([
-        "bakery",
-        "butcher",
-        "patisserie",
-        "traiteur",
-        "chocolatier",
-        "florist",
-        "farm shop",
-      ]),
+      detectionCategories: categories,
       pitchTemplates: JSON.stringify({
         MACHINE:
           "Goedemiddag, hier is MATO. Wij leveren verkoopautomaten, behuizing en betalings- en telemetrie-oplossingen in Vlaanderen. Mag ik kort toelichten wat we voor jullie locatie kunnen betekenen?",

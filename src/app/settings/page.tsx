@@ -37,9 +37,16 @@ export default async function SettingsPage() {
         <div className="label text-[var(--accent)]">Hoe het zoeken werkt</div>
         <p>
           Met een Google Places-sleutel hieronder doorzoekt een zone elke gemeente
-          op bakkerijen, patisserieën, slagerijen, chocolatiers, ijssalons en
-          traiteurs — enkel zelfstandige zaken, geen supermarktketens. Ongeveer
-          negen op de tien hebben een telefoonnummer.
+          op bakkerijen, patisserieën, slagerijen, chocolatiers, ijssalons,
+          traiteurs, hoevewinkels en afhaalzaken — enkel zelfstandige zaken, geen
+          supermarktketens. Ongeveer negen op de tien hebben een telefoonnummer.
+        </p>
+        <p>
+          Het net staat bewust wijd open: er wordt niets weggelaten op grond van
+          categorie, alleen anders gewogen. Zaken die al een automaat hebben staan
+          bovenaan — bewezen kopers — en daarna wie er een bij de buren in de
+          straat heeft staan. Wie te streng filtert houdt een korte lijst over die
+          er goed uitziet, en mist de zaak die net niet in het hokje paste.
         </p>
         <p>
           Laat je de sleutel leeg, dan valt de app terug op{" "}

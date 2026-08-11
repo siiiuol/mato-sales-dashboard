@@ -42,6 +42,8 @@ export async function GET() {
         reason: true,
         hasVending: true,
         vendingDetail: true,
+        nearbyVending: true,
+        sellsTakeaway: true,
         phoneOpener: true,
         recommendedAngle: true,
         recommendedMachine: true,

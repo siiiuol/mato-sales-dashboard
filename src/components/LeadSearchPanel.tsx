@@ -61,9 +61,10 @@ export function LeadSearchPanel({
         <h2 className="label text-[var(--accent)]">Leads zoeken</h2>
         <p className="text-sm text-[var(--text-dim)] mt-1">
           Doorzoekt elke gemeente in de zone op bakkerijen, patisserieën,
-          slagerijen, chocolatiers, ijssalons en hoevewinkels — en op zaken die al
-          een automaat hebben. Zoek dezelfde zone gerust opnieuw; niets wordt
-          dubbel toegevoegd.
+          slagerijen, chocolatiers, ijssalons, hoevewinkels, traiteurs en
+          afhaalzaken. Merkt daarbij op wie al een automaat heeft en wie er een
+          in de straat heeft staan. Zoek dezelfde zone gerust opnieuw; niets
+          wordt dubbel toegevoegd.
         </p>
       </div>
 

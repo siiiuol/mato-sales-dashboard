@@ -27,6 +27,8 @@ export type WorkLead = {
   reason: string | null;
   hasVending: boolean;
   vendingDetail: string | null;
+  nearbyVending: number;
+  sellsTakeaway: boolean;
   phoneOpener: string | null;
   recommendedAngle: string | null;
   recommendedMachine: string | null;
@@ -195,11 +197,23 @@ export function WorkMode({
     card?.phoneOpener ||
     "Goedemiddag, hier is MATO. Ik bel over een mogelijke verkoopautomaat.";
 
+  /**
+   * De invalshoek volgt het sterkste signaal dat deze zaak heeft.
+   *
+   * Volgorde is niet willekeurig: een bestaande automaat is een gesprek over
+   * uitbreiden, de buren zijn een gesprek over achterstand, en afhaal is een
+   * gesprek over wat ze al doen. Wie met de zwakste opening begint, krijgt de
+   * sterkste nooit meer op tafel.
+   */
   const angle =
     card?.recommendedAngle ||
     (card?.hasVending
       ? "Ze hebben al een automaat — vraag wat werkt, wat niet, en of een tweede of een vervanging zinvol is."
-      : "Producten langer beschikbaar zonder extra bemand punt.");
+      : card?.nearbyVending
+        ? `In de buurt staan er al ${card.nearbyVending} — vraag of ze klanten zien uitwijken naar wie 's avonds nog open is.`
+        : card?.sellsTakeaway
+          ? "Ze verkopen al afhaal — dezelfde producten blijven met een automaat ook na sluitingstijd verkopen."
+          : "Producten langer beschikbaar zonder extra bemand punt.");
 
   const machine = card?.recommendedMachine || "Bepaal de automaat tijdens het gesprek";
 
@@ -315,8 +329,16 @@ export function WorkMode({
                   {currentTriage.hasVending && (
                     <div className="badge badge-live">Heeft automaat</div>
                   )}
+                  {!currentTriage.hasVending && currentTriage.nearbyVending > 0 && (
+                    <div className="badge">
+                      {currentTriage.nearbyVending} in de buurt
+                    </div>
+                  )}
+                  {currentTriage.sellsTakeaway && (
+                    <div className="badge">Afhaal</div>
+                  )}
                   {!currentTriage.phone && (
-                    <div className="text-[var(--warn)]">no phone</div>
+                    <div className="text-[var(--warn)]">geen nummer</div>
                   )}
                 </div>
               </div>
@@ -325,6 +347,15 @@ export function WorkMode({
                 <p className="text-sm text-[var(--accent)] border border-[var(--accent-dim)] px-3 py-2">
                   {currentTriage.vendingDetail} — bewezen koper, vraag naar
                   vervanging of een tweede automaat.
+                </p>
+              )}
+
+              {!currentTriage.hasVending && currentTriage.nearbyVending > 0 && (
+                <p className="text-sm text-[var(--accent)] border border-[var(--accent-dim)] px-3 py-2">
+                  {currentTriage.nearbyVending === 1
+                    ? "Eén automaat binnen 1,5 km"
+                    : `${currentTriage.nearbyVending} automaten binnen 1,5 km`}{" "}
+                  — de buren zijn al om, deze zaak nog niet.
                 </p>
               )}
 

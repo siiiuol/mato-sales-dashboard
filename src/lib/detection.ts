@@ -1,8 +1,17 @@
 import type { PrismaClient } from "@prisma/client";
-import { categoryLabel, ZONE_TOWNS } from "./constants";
-import { scanZoneCandidates, vendingLabel, vendingMachines, type OsmCandidate } from "./osm";
+import {
+  categoryLabel,
+  DEFAULT_DETECTION_CATEGORIES,
+  ZONE_TOWNS,
+} from "./constants";
+import {
+  applyVendingSignals,
+  scanZoneCandidates,
+  vendingMachines,
+  type OsmCandidate,
+} from "./osm";
 
-const CATEGORY_WEIGHT: Record<string, number> = {
+export const CATEGORY_WEIGHT: Record<string, number> = {
   bakery: 34,
   bakkerij: 34,
   butcher: 30,
@@ -39,40 +48,123 @@ function parseCategories(raw: string): string[] {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
-    return [
-      "bakery",
-      "patisserie",
-      "butcher",
-      "chocolatier",
-      "ice cream",
-      "traiteur",
-      "cheese",
-      "farm shop",
-    ];
+    return [...DEFAULT_DETECTION_CATEGORIES];
   }
 }
 
-export function scoreLead(input: {
+/**
+ * Categorieën die zelf verpakken: bereide gerechten, porties, schaaltjes.
+ *
+ * MATO verkoopt niet alleen automaten maar ook verpakking en
+ * verpakkingsmachines. Deze zaken zijn daarvoor de eerste gesprekken, ook als
+ * een automaat nog niet aan de orde is.
+ */
+const PACKAGING_FIT = new Set([
+  "traiteur",
+  "butcher",
+  "slagerij",
+  "farm shop",
+  "hoevewinkel",
+  "cheese",
+  "takeaway",
+]);
+
+export type LeadSignalInput = {
   category: string;
   phone?: string | null;
   reviewCount?: number;
   hasVending?: boolean;
-}): { score: number; reason: string } {
+  /** Automaten in de buurt die niet van deze zaak zijn. */
+  nearbyVending?: number;
+  sellsTakeaway?: boolean;
+};
+
+export type ScoredSignal = { label: string; points: number };
+
+/**
+ * Gewichten op één plek, zodat de score navertelbaar blijft.
+ *
+ * Vroeger stond dit als één optelsom door de functie heen en was "waarom is dit
+ * een 87?" niet te beantwoorden. Nu levert `scoreLead` de losse signalen mee.
+ */
+export const SCORE_WEIGHTS = {
+  /** Bellen is het hele werk; een nummer weegt daarom zwaarder dan wat ook. */
+  phone: 25,
+  /** Bewezen koper: vervanging of een tweede automaat. */
+  hasVending: 20,
+  /** Per automaat van een buur, tot een plafond. */
+  nearbyVendingEach: 6,
+  nearbyVendingMax: 18,
+  /** Portioneert en verpakt al voor onderweg. */
+  takeaway: 8,
+  /** Kandidaat voor de verpakkingslijn, los van automaten. */
+  packaging: 5,
+  sizeMax: 20,
+  /** Iedereen begint boven nul; een lead is pas een lead als je kunt bellen. */
+  base: 10,
+} as const;
+
+/**
+ * Weegt één zaak, en vertelt waarom.
+ *
+ * Het net staat bewust wijd open: er wordt niets weggegooid op grond van
+ * categorie, alleen anders gewogen. Wie te streng filtert houdt een korte lijst
+ * over die er goed uitziet en mist de zaak die net niet in het hokje paste.
+ */
+export function scoreLead(input: LeadSignalInput): {
+  score: number;
+  reason: string;
+  signals: ScoredSignal[];
+} {
+  const signals: ScoredSignal[] = [];
+
   const base = CATEGORY_WEIGHT[input.category] ?? 15;
-  // A number you can dial is worth more than any other signal in a calling tool.
-  const phoneBonus = input.phone ? 25 : 0;
-  const sizeBonus = Math.min(20, Math.floor((input.reviewCount ?? 0) / 5));
-  // Already running a machine means proven demand — a replacement or second-site
-  // prospect, not a competitor to avoid.
-  const vendingBonus = input.hasVending ? 20 : 0;
-  const score = Math.min(99, base + phoneBonus + sizeBonus + vendingBonus + 10);
-  const bits = [
-    categoryLabel(input.category),
-    input.hasVending ? "heeft al een automaat" : null,
-    input.phone ? "telefoon bekend" : "geen telefoon",
-    sizeBonus > 0 ? "grotere zaak" : null,
-  ].filter(Boolean);
-  return { score, reason: bits.join(" · ") };
+  signals.push({ label: categoryLabel(input.category), points: base });
+
+  if (input.hasVending) {
+    signals.push({ label: "heeft al een automaat", points: SCORE_WEIGHTS.hasVending });
+  }
+
+  const neighbours = Math.max(0, input.nearbyVending ?? 0);
+  if (neighbours > 0) {
+    const points = Math.min(
+      SCORE_WEIGHTS.nearbyVendingMax,
+      neighbours * SCORE_WEIGHTS.nearbyVendingEach
+    );
+    signals.push({
+      label:
+        neighbours === 1
+          ? "buur heeft al een automaat"
+          : `${neighbours} automaten in de buurt`,
+      points,
+    });
+  }
+
+  if (input.sellsTakeaway) {
+    signals.push({ label: "verkoopt afhaal", points: SCORE_WEIGHTS.takeaway });
+  }
+
+  if (PACKAGING_FIT.has(input.category)) {
+    signals.push({ label: "ook voor verpakking", points: SCORE_WEIGHTS.packaging });
+  }
+
+  signals.push({
+    label: input.phone ? "telefoon bekend" : "geen telefoon",
+    points: input.phone ? SCORE_WEIGHTS.phone : 0,
+  });
+
+  const sizeBonus = Math.min(
+    SCORE_WEIGHTS.sizeMax,
+    Math.floor((input.reviewCount ?? 0) / 5)
+  );
+  if (sizeBonus > 0) {
+    signals.push({ label: "grotere zaak", points: sizeBonus });
+  }
+
+  const total = signals.reduce((sum, signal) => sum + signal.points, 0);
+  const score = Math.min(99, total + SCORE_WEIGHTS.base);
+
+  return { score, reason: signals.map((s) => s.label).join(" · "), signals };
 }
 
 /**
@@ -285,6 +377,10 @@ async function placesCandidates(
         reviewCount: place.userRatingCount ?? 0,
         hasVending: false,
         vendingDetail: null,
+        // Google's primaire type is het enige afhaalsignaal dat hier te halen
+        // valt; een los `takeaway`-veld zoals in OpenStreetMap bestaat niet.
+        sellsTakeaway: place.primaryType === "meal_takeaway",
+        nearbyVending: 0,
       });
     }
     }
@@ -298,17 +394,16 @@ async function placesCandidates(
   return results;
 }
 
-/** Marks candidates that sit on the same premises as a mapped vending machine. */
+/**
+ * Zet de automaatsignalen op de resultaten van de betaalde zoekweg.
+ *
+ * Google kent geen automaten, OpenStreetMap wel en gratis. Dezelfde functie als
+ * de gratis weg gebruikt, zodat een lead dezelfde score krijgt ongeacht waar
+ * hij vandaan kwam.
+ */
 async function flagVendingFromOsm(zone: string, candidates: OsmCandidate[]) {
   try {
-    const machines = await vendingMachines(zone);
-    for (const c of candidates) {
-      const near = machines.find((m) => haversineKm(c, m) <= 0.05);
-      if (near) {
-        c.hasVending = true;
-        c.vendingDetail = vendingLabel(near.vending, near.operator);
-      }
-    }
+    applyVendingSignals(candidates, await vendingMachines(zone));
   } catch {
     // Optional enrichment — never fail a paid scan because OSM was busy.
   }
@@ -423,12 +518,14 @@ export async function runDetection(
         continue;
       }
 
-      const hasVending = "hasVending" in c ? Boolean(c.hasVending) : false;
+      const hasVending = Boolean(c.hasVending);
       const { score, reason } = scoreLead({
         category: c.category,
         phone: c.phone,
-        reviewCount: "reviewCount" in c ? (c as { reviewCount?: number }).reviewCount : 0,
+        reviewCount: c.reviewCount,
         hasVending,
+        nearbyVending: c.nearbyVending,
+        sellsTakeaway: c.sellsTakeaway,
       });
 
       await prisma.lead.create({
@@ -449,8 +546,12 @@ export async function runDetection(
           reason: `${reason} · ${zone}`,
           status: "NEW",
           hasVending,
-          vendingDetail:
-            "vendingDetail" in c ? ((c as { vendingDetail?: string | null }).vendingDetail ?? null) : null,
+          vendingDetail: c.vendingDetail ?? null,
+          nearbyVending: c.nearbyVending ?? 0,
+          sellsTakeaway: Boolean(c.sellsTakeaway),
+          // Bewaard, niet alleen gebruikt: zonder dit verdwijnt "grotere zaak"
+          // bij de eerstvolgende herberekening en zakt de score ongemerkt.
+          reviewCount: c.reviewCount ?? 0,
         },
       });
       created++;
