@@ -595,8 +595,18 @@ a {
   footer,
   .btn,
   .step-rail,
-  .mission-strip {
+  .mission-strip,
+  /* Alles rond een document dat niet op papier hoort: knoppen, waarschuwingen,
+     terugkoppelingen naar de app. Wat overblijft is het contract zelf. */
+  .doc-hide {
     display: none !important;
+  }
+  .doc-sheet {
+    border: none !important;
+    padding: 0 !important;
+  }
+  .doc-body table {
+    width: 100%;
   }
   main {
     max-width: none !important;

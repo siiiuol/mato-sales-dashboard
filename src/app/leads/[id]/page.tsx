@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
@@ -12,6 +13,7 @@ import {
 } from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
 import { OwnerButton } from "@/components/OwnerButton";
+import { ContractForm } from "@/components/ContractForm";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
 import { idSchema } from "@/lib/validation";
@@ -45,11 +47,31 @@ export default async function LeadDetailPage({
     },
   });
   if (!lead) notFound();
-  const audits = await prisma.auditEvent.findMany({
-    where: { entityType: "lead", entityId: lead.id },
-    orderBy: { createdAt: "desc" },
-    take: 30,
-  });
+  const [audits, products, documents] = await Promise.all([
+    prisma.auditEvent.findMany({
+      where: { entityType: "lead", entityId: lead.id },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+    prisma.product.findMany({
+      where: { active: true },
+      orderBy: [{ line: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, line: true, listPrice: true },
+    }),
+    prisma.generatedDocument.findMany({
+      where: { leadId: lead.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        number: true,
+        title: true,
+        status: true,
+        createdAt: true,
+        signerName: true,
+        createdBy: { select: { name: true } },
+      },
+    }),
+  ]);
 
   const timeline = [
     ...lead.outreach.map((item) => ({
@@ -181,6 +203,36 @@ export default async function LeadDetailPage({
               commissie.
             </p>
           </form>
+        </section>
+
+        <section className="panel p-4 space-y-3">
+          <h2 className="label text-[var(--accent)]">Documenten</h2>
+
+          {documents.length > 0 && (
+            <ul className="space-y-2 text-sm">
+              {documents.map((doc) => (
+                <li
+                  key={doc.id}
+                  className="border-b border-[var(--border)] pb-2 last:border-0"
+                >
+                  <Link
+                    href={`/documenten/${doc.id}`}
+                    className="hover:text-[var(--accent)]"
+                  >
+                    <span className="mono text-xs">{doc.number}</span>
+                    <span className="block">{doc.title}</span>
+                  </Link>
+                  <div className="text-xs text-[var(--text-dim)]">
+                    {doc.createdBy?.name ?? "onbekend"} ·{" "}
+                    {doc.createdAt.toLocaleDateString("nl-BE")}
+                    {doc.signerName ? ` · getekend door ${doc.signerName}` : ""}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <ContractForm leadId={lead.id} products={products} />
         </section>
 
         <section className="panel p-4 space-y-3">

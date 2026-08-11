@@ -1,6 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import { hash } from "bcryptjs";
 import { DEFAULT_DETECTION_CATEGORIES } from "../src/lib/constants";
+import {
+  CONTRACT_BODY,
+  CONTRACT_CODE,
+  CONTRACT_PREFIX,
+} from "../src/lib/contract-template";
 
 const prisma = new PrismaClient();
 
@@ -153,6 +158,29 @@ async function main() {
     if (!existing) {
       await prisma.product.create({ data: p });
     }
+  }
+
+  // Het contractsjabloon. Versie 1 wordt alleen aangemaakt als ze er nog niet
+  // is: aanpassingen die in de app gedaan zijn mogen niet teruggedraaid worden
+  // door opnieuw te seeden.
+  const existingTemplate = await prisma.documentTemplate.findFirst({
+    where: { code: CONTRACT_CODE, version: 1 },
+  });
+  if (!existingTemplate) {
+    await prisma.documentTemplate.create({
+      data: {
+        code: CONTRACT_CODE,
+        name: "Verkoopovereenkomst",
+        category: "SALES",
+        language: "nl",
+        version: 1,
+        status: "ACTIVE",
+        numberPrefix: CONTRACT_PREFIX,
+        body: CONTRACT_BODY,
+        outputFormats: "PDF",
+        effectiveAt: new Date(),
+      },
+    });
   }
 
   // No demo leads or demo deals.
