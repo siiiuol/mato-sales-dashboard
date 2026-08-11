@@ -61,8 +61,12 @@ export async function requireUser(roles?: readonly AppRole[]) {
 export async function requirePageUser(roles?: readonly AppRole[]) {
   try {
     return await requireUser(roles);
-  } catch {
-    redirect("/login");
+  } catch (error) {
+    // Wie wél aangemeld is maar de rol mist, hoort niet op het aanmeldscherm te
+    // belanden: daar is niets op te lossen, en opnieuw aanmelden met hetzelfde
+    // account geeft dezelfde uitkomst. Terug naar Werk is het eerlijke antwoord.
+    const forbidden = error instanceof AuthError && error.status === 403;
+    redirect(forbidden ? "/" : "/login");
   }
 }
 

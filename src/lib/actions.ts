@@ -8,6 +8,7 @@ import { FLANDERS_ZONES } from "./constants";
 import type { LeadStatus } from "./types";
 import { z } from "zod";
 import { audit, requireUser } from "./dal";
+import { claimableWhere } from "./claims";
 import { callOutcomeSchema, formObject, idSchema } from "./validation";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
@@ -33,6 +34,27 @@ export async function scanZone(zone: string) {
   return result;
 }
 
+/**
+ * Zet deze zaak op jouw naam zolang je hem voor je hebt.
+ *
+ * `updateMany` met de claimvoorwaarde in de `where` is hier het hele punt: de
+ * database schrijft alleen als de rij op dát moment nog vrij is, dus twee
+ * medewerkers die tegelijk beginnen kunnen niet allebei slagen. Een losse
+ * lees-dan-schrijf zou precies dat wél toelaten.
+ *
+ * Geeft terug of de claim gelukt is; de aanroeper slaat de lead over als niet.
+ */
+export async function claimLead(leadId: string): Promise<boolean> {
+  const user = await requireUser(["admin", "sales", "reviewer"]);
+  const id = idSchema.parse(leadId);
+
+  const { count } = await prisma.lead.updateMany({
+    where: claimableWhere(id, user.id),
+    data: { claimedById: user.id, claimedAt: new Date() },
+  });
+  return count === 1;
+}
+
 export async function logCall(formData: FormData) {
   const user = await requireUser(["admin", "sales"]);
   const parsed = z.object({
@@ -47,7 +69,7 @@ export async function logCall(formData: FormData) {
   const callbackAt = parsed.callbackAt || "";
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { doNotContact: true, complianceStatus: true },
+    select: { doNotContact: true, complianceStatus: true, ownerId: true },
   });
   if (!lead) throw new Error("Lead niet gevonden");
   if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
@@ -84,6 +106,13 @@ export async function logCall(formData: FormData) {
         nextFollowUpAt ??
         (status === "FOLLOW_UP" ? new Date(Date.now() + 86400000) : null),
       lastTouchedAt: new Date(),
+      // Genoteerd betekent klaar: de claim gaat eraf zodat de lead niet blijft
+      // hangen op naam van wie er toevallig het laatst naar keek.
+      claimedById: null,
+      claimedAt: null,
+      // Eigenaar blijft wie er als eerste belde, zodat opvolging bij dezelfde
+      // persoon terechtkomt en de klant niet elke keer een andere stem krijgt.
+      ownerId: lead.ownerId ?? user.id,
     },
   });
   await audit(user.id, "call.logged", "lead", leadId, { outcome });
@@ -179,7 +208,13 @@ export async function skipLead(leadId: string) {
 
   await prisma.lead.update({
     where: { id },
-    data: { status: "SKIPPED", nextActionAt: null, lastTouchedAt: new Date() },
+    data: {
+      status: "SKIPPED",
+      nextActionAt: null,
+      lastTouchedAt: new Date(),
+      claimedById: null,
+      claimedAt: null,
+    },
   });
   // Store the previous status so a skip is restorable, not just reversible.
   await audit(user.id, "lead.skipped", "lead", id, { previousStatus: lead.status });
@@ -200,7 +235,13 @@ export async function unskipLead(leadId: string) {
   const id = idSchema.parse(leadId);
   await prisma.lead.update({
     where: { id },
-    data: { status: "NEW", complianceStatus: "PENDING", nextActionAt: null },
+    data: {
+      status: "NEW",
+      complianceStatus: "PENDING",
+      nextActionAt: null,
+      claimedById: null,
+      claimedAt: null,
+    },
   });
   await audit(user.id, "lead.unskipped", "lead", id);
   revalidatePath("/leads");

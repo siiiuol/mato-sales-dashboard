@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  useTransition,
+} from "react";
 import { CALL_OUTCOMES, categoryLabel, WORK_STEPS } from "@/lib/constants";
-import { contactLead, skipLead } from "@/lib/actions";
+import { claimLead, contactLead, skipLead } from "@/lib/actions";
 
 type Step = "review" | "call" | "log";
 
@@ -35,6 +42,13 @@ const MORE_OUTCOMES = CALL_OUTCOMES.filter((o) => !PRIMARY_VALUES.includes(o.val
 
 const BRIEFING_KEY = "mato-work-briefing-seen";
 
+/**
+ * localStorage verandert hier niet buiten deze component om, dus er valt niets
+ * te abonneren. Moet wel buiten de component staan: een nieuwe functie per
+ * render zou `useSyncExternalStore` elke keer opnieuw laten abonneren.
+ */
+const subscribeToNothing = () => () => {};
+
 const DEFAULT_QUESTIONS = [
   "Welke producten wilt u onbemand beschikbaar maken?",
   "Hoe ziet restocking er praktisch uit?",
@@ -58,9 +72,22 @@ export function WorkMode({
   const [message, setMessage] = useState("");
   const [pending, start] = useTransition();
   const [showMoreOutcomes, setShowMoreOutcomes] = useState(false);
-  const [showBriefing, setShowBriefing] = useState(
-    () => typeof window !== "undefined" && !window.localStorage.getItem(BRIEFING_KEY)
+  /**
+   * Of de uitleg al eens gezien is, staat in localStorage — iets wat de server
+   * niet kan weten.
+   *
+   * Via `useSyncExternalStore` met een aparte serversnapshot: die rendert "al
+   * gezien", en na het hydrateren schakelt React over op de echte waarde. Dat
+   * tijdens het renderen zelf uitlezen leverde een hydratiefout op, omdat
+   * server en client dan verschillende HTML opleverden.
+   */
+  const briefingSeen = useSyncExternalStore(
+    subscribeToNothing,
+    () => window.localStorage.getItem(BRIEFING_KEY) !== null,
+    () => true
   );
+  const [briefingDismissed, setBriefingDismissed] = useState(false);
+  const showBriefing = !briefingSeen && !briefingDismissed;
   const [outcome, setOutcome] = useState<string>("NO_ANSWER");
   const [note, setNote] = useState("");
   const [callbackAt, setCallbackAt] = useState("");
@@ -70,7 +97,7 @@ export function WorkMode({
 
   const dismissBriefing = () => {
     window.localStorage.setItem(BRIEFING_KEY, "1");
-    setShowBriefing(false);
+    setBriefingDismissed(true);
   };
 
   const refreshCallQueue = useCallback(async () => {
@@ -134,6 +161,30 @@ export function WorkMode({
   }, [currentCall]);
 
   const card = step === "review" ? currentTriage : currentCall;
+
+  /**
+   * Zet de zaak die nu op je scherm staat op jouw naam.
+   *
+   * Claimen bij tonen en niet bij openen van de pagina: de wachtrij bevat
+   * veertig leads, en die allemaal vastzetten zou de rest van het team veertig
+   * zaken afpakken waar je nog niet eens naar gekeken hebt.
+   *
+   * Lukt de claim niet, dan was een collega net eerder — die lead verdwijnt uit
+   * je wachtrij en de volgende schuift door.
+   */
+  useEffect(() => {
+    if (!card) return;
+    let cancelled = false;
+    void claimLead(card.id).then((claimed) => {
+      if (cancelled || claimed) return;
+      const dropped = card.id;
+      setTriageQueue((prev) => prev.filter((l) => l.id !== dropped));
+      setCallQueue((prev) => prev.filter((l) => l.id !== dropped));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [card]);
 
   const why =
     card?.evidenceSummary ||

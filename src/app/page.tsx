@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
+import { claimFilter } from "@/lib/claims";
 import { WorkMode } from "@/components/WorkMode";
 
 export const dynamic = "force-dynamic";
@@ -26,11 +27,16 @@ const LEAD_FIELDS = {
 } as const;
 
 export default async function HomePage() {
-  await requirePageUser(["admin", "sales", "reviewer"]);
+  const user = await requirePageUser(["admin", "sales", "reviewer"]);
 
   const now = new Date();
   const startOfDay = new Date(now);
   startOfDay.setHours(0, 0, 0, 0);
+
+  // Zaken die een collega op dit moment voor zich heeft, blijven uit je
+  // wachtrij. Zonder dit krijgen twee mensen die tegelijk beginnen dezelfde
+  // bovenste lead en belt de zaak twee keer.
+  const mine = claimFilter(user.id, now);
 
   const [triageLeads, callLeads, clearedToday] = await Promise.all([
     // Freshly found, not yet decided on. Businesses already running a machine
@@ -40,6 +46,7 @@ export default async function HomePage() {
         doNotContact: false,
         complianceStatus: "PENDING",
         status: "NEW",
+        AND: [mine],
       },
       orderBy: [{ hasVending: "desc" }, { score: "desc" }, { createdAt: "desc" }],
       take: 40,
@@ -50,7 +57,10 @@ export default async function HomePage() {
         doNotContact: false,
         complianceStatus: "CLEARED",
         status: { in: ["NEW", "TO_CALL", "FOLLOW_UP", "CONTACTED"] },
-        OR: [{ nextActionAt: { lte: now } }, { nextActionAt: null }],
+        AND: [
+          { OR: [{ nextActionAt: { lte: now } }, { nextActionAt: null }] },
+          mine,
+        ],
       },
       orderBy: [
         { hasVending: "desc" },

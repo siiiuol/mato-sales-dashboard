@@ -4,7 +4,31 @@ export const NAV = [
   { href: "/calls", label: "Bellen" },
 ] as const;
 
-export const NAV_ADMIN = [{ href: "/settings", label: "Instellingen" }] as const;
+/**
+ * Alleen zichtbaar voor de beheerder. De echte afscherming staat in
+ * `requirePageUser` op de pagina's zelf — dit bepaalt enkel wat er in de balk
+ * verschijnt.
+ */
+export const NAV_ADMIN = [
+  { href: "/team", label: "Team" },
+  { href: "/settings", label: "Instellingen" },
+] as const;
+
+/** Rollen zoals ze op het scherm heten. In de database blijven ze Engels. */
+export const ROLE_LABELS: Record<string, string> = {
+  admin: "Beheerder",
+  sales: "Verkoop",
+  reviewer: "Meelezer",
+};
+
+export function roleLabel(role: string) {
+  return ROLE_LABELS[role] ?? role;
+}
+
+export const COMMISSION_TYPE_LABELS: Record<string, string> = {
+  PERCENT: "Percentage van de verkoop",
+  FIXED: "Vast bedrag per verkoop",
+};
 
 /** Selecteren → Bellen → Noteren is een echte volgorde, dus genummerd. */
 export const WORK_STEPS = [

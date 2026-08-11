@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { logCall } from "@/lib/actions";
 import { CALL_OUTCOMES, statusLabel } from "@/lib/constants";
 import { requirePageUser } from "@/lib/dal";
+import { claimFilter } from "@/lib/claims";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export default async function CallsPage({
 }: {
   searchParams: Promise<{ lead?: string; queue?: string }>;
 }) {
-  await requirePageUser(["admin", "sales", "reviewer"]);
+  const user = await requirePageUser(["admin", "sales", "reviewer"]);
   const params = await searchParams;
   const selected = params.lead;
   const showQueue = params.queue === "1";
@@ -23,6 +24,7 @@ export default async function CallsPage({
       },
       doNotContact: false,
       complianceStatus: "CLEARED",
+      AND: [claimFilter(user.id, now)],
     },
     orderBy: [
       // Zaken met een automaat eerst — bewezen kopers, zoals in Werk.
