@@ -9,8 +9,14 @@ import {
 } from "@/lib/actions";
 import { TriageButtons } from "@/components/TriageButtons";
 import { OwnerButton } from "@/components/OwnerButton";
-import { LEAD_STATUSES, statusLabel, categoryLabel } from "@/lib/constants";
-import { FLANDERS_ZONES } from "@/lib/constants";
+import {
+  LEAD_STATUSES,
+  statusLabel,
+  categoryLabel,
+  FLANDERS_ZONES,
+  ZONE_TOWNS,
+} from "@/lib/constants";
+import { boundingBoxFilter, withinRadius } from "@/lib/geo";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
 import { requirePageUser } from "@/lib/dal";
@@ -23,7 +29,21 @@ type LeadFilters = {
   status?: string;
   category?: string;
   city?: string;
+  /** Vrije tekst op de bedrijfsnaam. */
+  q?: string;
+  /** Gemeente waar de straal omheen ligt — moet in ZONE_TOWNS staan. */
+  near?: string;
+  /** Straal in kilometer rond `near`. */
+  km?: string;
 };
+
+/** Straalkeuzes. Meer dan 50 km is in Vlaanderen bijna een hele provincie. */
+const RADIUS_CHOICES = [5, 10, 15, 25, 50];
+
+/** Alle gemeenten met coördinaten, over de provincies heen. */
+const TOWNS_WITH_COORDS = Object.values(ZONE_TOWNS)
+  .flat()
+  .sort((a, b) => a.name.localeCompare(b.name));
 
 function hrefWith(sp: LeadFilters, overrides: LeadFilters) {
   const merged = { ...sp, ...overrides };
@@ -42,14 +62,33 @@ export default async function LeadsPage({
 }) {
   const user = await requirePageUser(["admin", "sales", "reviewer"]);
   const sp = await searchParams;
+
+  const centre = sp.near
+    ? TOWNS_WITH_COORDS.find((town) => town.name === sp.near)
+    : undefined;
+  const radiusKm = centre
+    ? Math.min(200, Math.max(1, Number(sp.km) || 15))
+    : 0;
+
   const where = {
     ...(sp.province ? { province: sp.province } : {}),
     ...(sp.status ? { status: sp.status as never } : {}),
     ...(sp.category ? { category: sp.category } : {}),
     ...(sp.city ? { city: sp.city } : {}),
+    // `contains` wordt op SQLite een LIKE, en die is voor ASCII toch al
+    // hoofdletterongevoelig. `mode: "insensitive"` bestaat hier niet.
+    ...(sp.q?.trim() ? { name: { contains: sp.q.trim() } } : {}),
+    // Grove voorselectie in de database; de hoeken van de rechthoek gaan er
+    // hieronder met de echte afstand af.
+    ...(centre ? boundingBoxFilter(centre, radiusKm) : {}),
   };
 
-  const [leads, wonLeads, runs, settings, categoryRows, cityRows] = await Promise.all([
+  // Met een straal moet er ruimer gehaald worden dan de 200 die getoond worden:
+  // het verfijnen gooit nog rijen weg, en anders zouden dat er stilzwijgend
+  // minder dan 200 zijn.
+  const take = centre ? 2000 : 200;
+
+  const [allLeads, wonLeads, runs, settings, categoryRows, cityRows] = await Promise.all([
     prisma.lead.findMany({
       where,
       // Op ranking, net als de bel- en selecteerwachtrij. Met een limiet van
@@ -65,7 +104,7 @@ export default async function LeadsPage({
         { nearbyVending: "desc" },
         { createdAt: "desc" },
       ],
-      take: 200,
+      take,
       include: { owner: { select: { id: true, name: true } } },
     }),
     prisma.lead.findMany({
@@ -90,6 +129,15 @@ export default async function LeadsPage({
       select: { city: true },
     }),
   ]);
+
+  // De rechthoek uit de database is ruimer dan de cirkel; hier gaan de hoeken
+  // eraf. Pas daarna afkappen op 200, anders zou het verfijnen gaten slaan in
+  // een lijst die al ingekort was.
+  const leads = (
+    centre
+      ? allLeads.filter((lead) => withinRadius(centre, lead, radiusKm))
+      : allLeads
+  ).slice(0, 200);
 
   const categories = categoryRows
     .map((r) => r.category!)
@@ -166,9 +214,54 @@ export default async function LeadsPage({
         ))}
       </div>
 
-      <form method="get" className="flex flex-wrap items-end gap-2">
+      <form method="get" className="panel p-4 flex flex-wrap items-end gap-3">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
-        {sp.province && <input type="hidden" name="province" value={sp.province} />}
+
+        <div className="grow min-w-[12rem]">
+          <label className="label block mb-1">Zoek op naam</label>
+          <input
+            name="q"
+            className="input"
+            placeholder="Bakkerij…"
+            defaultValue={sp.q ?? ""}
+          />
+        </div>
+
+        <div>
+          <label className="label block mb-1">Provincie</label>
+          <select name="province" className="select" defaultValue={sp.province ?? ""}>
+            <option value="">Heel Vlaanderen</option>
+            {FLANDERS_ZONES.map((zone) => (
+              <option key={zone} value={zone}>
+                {zone}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label block mb-1">In de buurt van</label>
+          <select name="near" className="select" defaultValue={sp.near ?? ""}>
+            <option value="">Geen omgeving</option>
+            {TOWNS_WITH_COORDS.map((town) => (
+              <option key={town.name} value={town.name}>
+                {town.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="label block mb-1">Straal</label>
+          <select name="km" className="select" defaultValue={sp.km ?? "15"}>
+            {RADIUS_CHOICES.map((km) => (
+              <option key={km} value={km}>
+                {km} km
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div>
           <label className="label block mb-1">Categorie</label>
           <select name="category" className="select" defaultValue={sp.category ?? ""}>
@@ -194,15 +287,28 @@ export default async function LeadsPage({
         <button type="submit" className="btn btn-primary">
           Filteren
         </button>
-        {(sp.category || sp.city) && (
+        {(sp.category || sp.city || sp.q || sp.near || sp.province) && (
           <Link
-            href={hrefWith(sp, { category: undefined, city: undefined })}
+            href={hrefWith(sp, {
+              category: undefined,
+              city: undefined,
+              q: undefined,
+              near: undefined,
+              km: undefined,
+              province: undefined,
+            })}
             className="btn btn-ghost"
           >
-            Wis categorie/gemeente
+            Alles wissen
           </Link>
         )}
       </form>
+
+      {centre && (
+        <p className="text-sm text-[var(--text-dim)]">
+          Zaken binnen {radiusKm} km van {centre.name} — {leads.length} gevonden.
+        </p>
+      )}
 
       <section className="panel p-2 sm:p-3">
         <div className="label px-2 py-1 mb-2">

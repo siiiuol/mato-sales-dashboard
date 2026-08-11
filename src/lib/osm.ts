@@ -3,6 +3,11 @@ import {
   ZONE_BBOX,
   ZONE_TOWNS,
 } from "./constants";
+import { boxAround, haversineKm } from "./geo";
+
+// Doorgegeven omdat de tests en de scanner hem hier verwachten; de formule zelf
+// staat in geo.ts.
+export { boxAround };
 
 /**
  * Lead discovery over OpenStreetMap via Overpass.
@@ -258,17 +263,6 @@ function unionFor(groups: Array<[string, string[]]>, bbox: string) {
     .join("\n");
 }
 
-/** Bounding box of `radiusKm` around a point, as [south, west, north, east]. */
-export function boxAround(
-  lat: number,
-  lng: number,
-  radiusKm: number
-): [number, number, number, number] {
-  const dLat = radiusKm / 111;
-  const dLng = radiusKm / (111 * Math.cos((lat * Math.PI) / 180));
-  return [lat - dLat, lng - dLng, lat + dLat, lng + dLng];
-}
-
 function bboxStr(b: [number, number, number, number]) {
   return b.map((n) => n.toFixed(4)).join(",");
 }
@@ -355,18 +349,6 @@ export function sellsTakeaway(tags: Record<string, string>): boolean {
   if (value === "yes" || value === "only") return true;
   if (value === "no") return false;
   return (tags.amenity || "").toLowerCase() === "fast_food";
-}
-
-function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
-  const R = 6371;
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((a.lat * Math.PI) / 180) *
-      Math.cos((b.lat * Math.PI) / 180) *
-      Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
 }
 
 export type VendingPoint = {
