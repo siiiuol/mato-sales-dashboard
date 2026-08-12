@@ -1,0 +1,167 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { activityCounts, buildActivity, readableDetail } from "./activity";
+
+const EMPTY = { outreach: [], drafts: [], documents: [], audits: [] };
+
+const at = (iso: string) => new Date(iso);
+
+test("a logged call appears once, not twice", () => {
+  // Het logboek registreert élke handeling, ook die waarvan het gesprek zelf al
+  // bestaat. Zonder ontdubbelen staat elk telefoontje er dubbel op.
+  const items = buildActivity({
+    ...EMPTY,
+    outreach: [
+      {
+        id: "o1",
+        createdAt: at("2026-08-11T10:00:00Z"),
+        type: "CALL",
+        outcome: "INTERESTED",
+        note: "Wil offerte",
+        createdBy: { name: "Jonas" },
+      },
+    ],
+    audits: [
+      {
+        id: "a1",
+        createdAt: at("2026-08-11T10:00:01Z"),
+        action: "call.logged",
+        detail: '{"outcome":"INTERESTED"}',
+        actor: { name: "Jonas" },
+      },
+    ],
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "call");
+});
+
+test("the call keeps its outcome in Dutch and its note", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    outreach: [
+      {
+        id: "o1",
+        createdAt: at("2026-08-11T10:00:00Z"),
+        type: "CALL",
+        outcome: "NO_ANSWER",
+        note: "Rond 14u opnieuw",
+        createdBy: { name: "Jonas" },
+      },
+    ],
+  });
+  assert.match(item.title, /Gebeld/);
+  assert.ok(!item.title.includes("NO_ANSWER"));
+  assert.equal(item.detail, "Rond 14u opnieuw");
+  assert.equal(item.actor, "Jonas");
+});
+
+test("newest first, across all four sources", () => {
+  const items = buildActivity({
+    outreach: [
+      { id: "o", createdAt: at("2026-08-01T09:00:00Z"), type: "CALL", outcome: null, note: null },
+    ],
+    drafts: [
+      { id: "d", createdAt: at("2026-08-03T09:00:00Z"), subject: "Voorstel", status: "PREPARED" },
+    ],
+    documents: [
+      {
+        id: "g",
+        createdAt: at("2026-08-04T09:00:00Z"),
+        number: "MATO-VK-2026-0001",
+        title: "Contract",
+        status: "READY",
+        signerName: null,
+      },
+    ],
+    audits: [
+      { id: "a", createdAt: at("2026-08-02T09:00:00Z"), action: "lead.taken", detail: null },
+    ],
+  });
+  assert.deepEqual(
+    items.map((i) => i.kind),
+    ["document", "mail", "lead", "call"]
+  );
+});
+
+test("audit actions are shown in plain language", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    audits: [
+      { id: "a", createdAt: at("2026-08-02T09:00:00Z"), action: "lead.taken", detail: null },
+    ],
+  });
+  assert.equal(item.title, "Op naam gezet");
+});
+
+test("an unknown action keeps its raw name rather than vanishing", () => {
+  // Een gat in de geschiedenis is erger dan een lelijke regel.
+  const [item] = buildActivity({
+    ...EMPTY,
+    audits: [
+      { id: "a", createdAt: at("2026-08-02T09:00:00Z"), action: "iets.nieuws", detail: null },
+    ],
+  });
+  assert.equal(item.title, "iets.nieuws");
+});
+
+test("stored JSON detail becomes readable instead of raw", () => {
+  assert.equal(readableDetail('{"previousStatus":"NEW"}'), "was: NEW");
+  assert.equal(readableDetail('{"value":4200,"product":"Snack Pro 6"}'), "bedrag: 4200 · product: Snack Pro 6");
+});
+
+test("internal ids are kept in the log but stay off the screen", () => {
+  // "dealId: cmsos0e88000g6ywv0vjctfe5" zegt een mens niets.
+  assert.equal(
+    readableDetail('{"dealId":"cmsos0e88000g6ywv0vjctfe5","value":4200}'),
+    "bedrag: 4200"
+  );
+  assert.equal(readableDetail('{"to":"cmsors2fq00036ywvwigxckpo"}'), null);
+  // Ook als de sleutel niet naar een id klinkt maar er wel een bevat.
+  assert.equal(readableDetail('{"iets":"cmsors2fq00036ywvwigxckpo"}'), null);
+});
+
+test("empty or unparseable detail does not produce noise", () => {
+  assert.equal(readableDetail(null), null);
+  assert.equal(readableDetail("{}"), null);
+  assert.equal(readableDetail('{"to":null}'), null);
+  assert.equal(readableDetail("gewoon tekst"), "gewoon tekst");
+});
+
+test("a signed contract names its signer", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    documents: [
+      {
+        id: "g",
+        createdAt: at("2026-08-04T09:00:00Z"),
+        number: "MATO-VK-2026-0001",
+        title: "Contract",
+        status: "SIGNED",
+        signerName: "Jan Delecta",
+      },
+    ],
+  });
+  assert.match(item.title, /getekend/);
+  assert.match(item.detail ?? "", /Jan Delecta/);
+});
+
+test("counts are per kind and add up to the total", () => {
+  const items = buildActivity({
+    outreach: [
+      { id: "o1", createdAt: at("2026-08-01T09:00:00Z"), type: "CALL", outcome: null, note: null },
+      { id: "o2", createdAt: at("2026-08-02T09:00:00Z"), type: "CALL", outcome: null, note: null },
+    ],
+    drafts: [{ id: "d", createdAt: at("2026-08-03T09:00:00Z"), subject: "x", status: "SENT" }],
+    documents: [],
+    audits: [],
+  });
+  const counts = activityCounts(items);
+  assert.equal(counts.call, 2);
+  assert.equal(counts.mail, 1);
+  assert.equal(counts.document, 0);
+  assert.equal(counts.call + counts.mail + counts.document + counts.lead, items.length);
+});
+
+test("a lead with no history yields an empty timeline, not a crash", () => {
+  assert.deepEqual(buildActivity(EMPTY), []);
+});

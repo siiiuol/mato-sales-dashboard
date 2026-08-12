@@ -17,9 +17,18 @@ import { ContractForm } from "@/components/ContractForm";
 import { MailDraftPanel } from "@/components/MailDraftPanel";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
+import { activityCounts, buildActivity } from "@/lib/activity";
 import { idSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
+
+/** Eén kleur per soort gebeurtenis, zodat de tijdlijn te scannen is. */
+const TIMELINE_COLOURS: Record<string, string> = {
+  call: "var(--accent)",
+  mail: "var(--ok)",
+  document: "var(--caution)",
+  lead: "var(--border)",
+};
 
 export default async function LeadDetailPage({
   params,
@@ -87,20 +96,13 @@ export default async function LeadDetailPage({
     }),
   ]);
 
-  const timeline = [
-    ...lead.outreach.map((item) => ({
-      id: item.id,
-      at: item.createdAt,
-      title: `${item.type} · ${item.outcome || "logged"}`,
-      detail: item.note,
-    })),
-    ...audits.map((item) => ({
-      id: item.id,
-      at: item.createdAt,
-      title: item.action,
-      detail: item.detail,
-    })),
-  ].sort((a, b) => b.at.getTime() - a.at.getTime());
+  const timeline = buildActivity({
+    outreach: lead.outreach,
+    drafts,
+    documents,
+    audits,
+  });
+  const counts = activityCounts(timeline);
 
   return (
     <div className="space-y-6 anim-lock">
@@ -280,15 +282,47 @@ export default async function LeadDetailPage({
       </div>
 
       <section className="panel p-4">
-        <h2 className="label text-[var(--accent)] mb-3">Tijdlijn</h2>
-        <ol className="space-y-3">
-          {timeline.map((item) => (
-            <li key={item.id} className="border-l border-[var(--accent-dim)] pl-3">
-              <div className="font-medium text-sm">{item.title}</div>
-              <div className="text-xs text-[var(--text-dim)]">{item.at.toLocaleString("nl-BE")} · {item.detail || "—"}</div>
-            </li>
-          ))}
-        </ol>
+        <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+          <h2 className="label text-[var(--accent)]">Geschiedenis</h2>
+          <p className="text-xs text-[var(--text-dim)]">
+            {counts.call} {counts.call === 1 ? "gesprek" : "gesprekken"} ·{" "}
+            {counts.mail} {counts.mail === 1 ? "mail" : "mails"} ·{" "}
+            {counts.document} {counts.document === 1 ? "document" : "documenten"}
+          </p>
+        </div>
+
+        {timeline.length === 0 ? (
+          <p className="text-sm text-[var(--text-dim)]">
+            Er is nog niets gebeurd met deze lead.
+          </p>
+        ) : (
+          <ol className="space-y-3">
+            {timeline.map((item) => (
+              <li
+                key={item.id}
+                className="border-l-2 pl-3"
+                style={{ borderColor: TIMELINE_COLOURS[item.kind] }}
+              >
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <span className="font-medium text-sm">{item.title}</span>
+                  {item.actor && (
+                    <span className="text-xs text-[var(--text-dim)]">
+                      door {item.actor}
+                    </span>
+                  )}
+                </div>
+                {item.detail && (
+                  <div className="text-sm text-[var(--text-dim)] mt-0.5">
+                    {item.detail}
+                  </div>
+                )}
+                <div className="mono text-[0.65rem] text-[var(--text-mute)] mt-0.5">
+                  {item.at.toLocaleString("nl-BE")}
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
     </div>
   );
