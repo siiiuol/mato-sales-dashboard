@@ -447,6 +447,8 @@ export async function saveSettings(formData: FormData) {
     update: {
       businessName: String(formData.get("businessName") ?? "MATO"),
       placesApiKey: String(formData.get("placesApiKey") ?? ""),
+      openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
+      openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
@@ -456,6 +458,8 @@ export async function saveSettings(formData: FormData) {
       id: "default",
       businessName: String(formData.get("businessName") ?? "MATO"),
       placesApiKey: String(formData.get("placesApiKey") ?? ""),
+      openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
+      openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),

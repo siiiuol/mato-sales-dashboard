@@ -258,6 +258,7 @@ model User {
   creativeApproved  CreativeRequest[] @relation("CreativeApproved")
   creativeVersions  CreativeVersion[]
   brandAssets       BrandAsset[]
+  emailDrafts       EmailDraft[]
   templatesOwned    DocumentTemplate[] @relation("TemplateOwner")
   templatesApproved DocumentTemplate[] @relation("TemplateApprover")
   documentsCreated  GeneratedDocument[] @relation("DocumentCreator")
@@ -704,10 +705,18 @@ model EmailDraft {
   body       String
   status     String    @default("PREPARED")
   approvedAt DateTime?
+  /// Wie hem opstelde. Straks ook wie hem verstuurde.
+  createdById String?
+  /// Waar de tekst vandaan komt: AI of SJABLOON. Handig om achteraf te zien
+  /// welke aanpak werkt.
+  source     String    @default("AI")
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy User? @relation(fields: [createdById], references: [id])
+
+  @@index([leadId])
 }
 
 /// Aanmeldpogingen, voor snelheidsbegrenzing en om verdachte activiteit te zien.
@@ -743,6 +752,11 @@ model AppSettings {
   currency            String @default("EUR")
   timezone            String @default("Europe/Brussels")
   placesApiKey        String @default("")
+  /// Sleutel voor het opstellen van mails. Staat in de database, nooit in code.
+  openAiApiKey        String @default("")
+  /// Instelbaar, want OpenAI brengt regelmatig nieuwe modellen uit en dan hoeft
+  /// er geen nieuwe versie van de app voor.
+  openAiModel         String @default("gpt-4o-mini")
   /// Moet gelijk lopen met DEFAULT_DETECTION_CATEGORIES in src/lib/constants.ts.
   detectionCategories String @default("[\"bakery\",\"patisserie\",\"butcher\",\"chocolatier\",\"ice cream\",\"traiteur\",\"cheese\",\"farm shop\",\"takeaway\"]")
   enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")

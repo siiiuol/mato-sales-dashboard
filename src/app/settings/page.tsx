@@ -90,6 +90,39 @@ export default async function SettingsPage() {
         </div>
 
         <div>
+          <label className="label block mb-1">
+            OpenAI API-sleutel (voor het opstellen van mails)
+          </label>
+          <input
+            name="openAiApiKey"
+            className="input mono"
+            type="password"
+            autoComplete="off"
+            placeholder="Leeg = geen mails opstellen"
+            defaultValue={settings.openAiApiKey || ""}
+          />
+          <p className="text-xs text-[var(--text-dim)] mt-1">
+            Staat in de database, nooit in de code. Zonder sleutel werkt de rest
+            van de app gewoon; alleen &ldquo;Mail opstellen&rdquo; op de leadfiche
+            valt weg.
+          </p>
+        </div>
+
+        <div>
+          <label className="label block mb-1">OpenAI-model</label>
+          <input
+            name="openAiModel"
+            className="input mono"
+            placeholder="gpt-4o-mini"
+            defaultValue={settings.openAiModel || ""}
+          />
+          <p className="text-xs text-[var(--text-dim)] mt-1">
+            Instelbaar omdat OpenAI regelmatig nieuwe modellen uitbrengt. Bestaat
+            het model niet voor jouw sleutel, dan zegt de foutmelding dat.
+          </p>
+        </div>
+
+        <div>
           <label className="label block mb-1">Categorieën om te zoeken (komma-gescheiden)</label>
           <input
             name="categories"

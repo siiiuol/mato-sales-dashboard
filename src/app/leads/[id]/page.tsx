@@ -14,6 +14,7 @@ import {
 import { TriageButtons } from "@/components/TriageButtons";
 import { OwnerButton } from "@/components/OwnerButton";
 import { ContractForm } from "@/components/ContractForm";
+import { MailDraftPanel } from "@/components/MailDraftPanel";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
 import { idSchema } from "@/lib/validation";
@@ -47,7 +48,7 @@ export default async function LeadDetailPage({
     },
   });
   if (!lead) notFound();
-  const [audits, products, documents] = await Promise.all([
+  const [audits, products, documents, drafts] = await Promise.all([
     prisma.auditEvent.findMany({
       where: { entityType: "lead", entityId: lead.id },
       orderBy: { createdAt: "desc" },
@@ -68,6 +69,19 @@ export default async function LeadDetailPage({
         status: true,
         createdAt: true,
         signerName: true,
+        createdBy: { select: { name: true } },
+      },
+    }),
+    prisma.emailDraft.findMany({
+      where: { leadId: lead.id },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        subject: true,
+        body: true,
+        status: true,
+        createdAt: true,
         createdBy: { select: { name: true } },
       },
     }),
@@ -203,6 +217,15 @@ export default async function LeadDetailPage({
               commissie.
             </p>
           </form>
+        </section>
+
+        <section className="panel p-4 space-y-3">
+          <h2 className="label text-[var(--accent)]">Mail</h2>
+          <MailDraftPanel
+            leadId={lead.id}
+            hasWebsite={Boolean(lead.website)}
+            drafts={drafts}
+          />
         </section>
 
         <section className="panel p-4 space-y-3">
