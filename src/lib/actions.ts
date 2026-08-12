@@ -5,11 +5,11 @@ import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { runDetection } from "./detection";
 import { FLANDERS_ZONES } from "./constants";
-import type { LeadStatus } from "./types";
 import { z } from "zod";
 import { audit, requireUser } from "./dal";
 import { claimableWhere } from "./claims";
 import { callOutcomeSchema, formObject, idSchema } from "./validation";
+import { logCallForLead } from "./call-log";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
 
@@ -34,7 +34,6 @@ export async function scanZone(zone: string) {
   const result = await runDetection(prisma, zone, settings);
   revalidatePath("/");
   revalidatePath("/leads");
-  revalidatePath("/calls");
   return result;
 }
 
@@ -166,65 +165,19 @@ export async function logCall(formData: FormData) {
     callbackAt: z.string().optional(),
     nextLeadId: optionalId,
   }).parse(formObject(formData));
-  const { leadId, outcome } = parsed;
-  const note = parsed.note || null;
-  const callbackAt = parsed.callbackAt || "";
-  const lead = await prisma.lead.findUnique({
-    where: { id: leadId },
-    select: { doNotContact: true, complianceStatus: true, ownerId: true },
-  });
-  if (!lead) throw new Error("Lead niet gevonden");
-  if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
-    throw new Error("Geblokkeerd: deze lead mag niet gecontacteerd worden");
-  }
 
-  const nextFollowUpAt =
-    outcome === "CALLBACK" && callbackAt ? new Date(callbackAt) : null;
-
-  let status: LeadStatus = "CONTACTED";
-  if (outcome === "INTERESTED") status = "NEGOTIATION";
-  if (outcome === "NOT_INTERESTED") status = "LOST";
-  if (outcome === "CALLBACK" || outcome === "VOICEMAIL" || outcome === "NO_ANSWER") {
-    status = "FOLLOW_UP";
-  }
-  if (outcome === "WRONG_NUMBER") status = "DO_NOT_CONTACT";
-
-  await prisma.outreachEvent.create({
-    data: {
-      leadId,
-      type: "CALL",
-      outcome,
-      note,
-      nextFollowUpAt: nextFollowUpAt ?? undefined,
-      createdById: user.id,
-    },
+  await logCallForLead({
+    leadId: parsed.leadId,
+    outcome: parsed.outcome,
+    note: parsed.note,
+    callbackAt: parsed.callbackAt,
+    userId: user.id,
   });
 
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      status,
-      nextActionAt:
-        nextFollowUpAt ??
-        (status === "FOLLOW_UP" ? new Date(Date.now() + 86400000) : null),
-      lastTouchedAt: new Date(),
-      // Genoteerd betekent klaar: de claim gaat eraf zodat de lead niet blijft
-      // hangen op naam van wie er toevallig het laatst naar keek.
-      claimedById: null,
-      claimedAt: null,
-      // Wie belt, krijgt de zaak op zijn naam. Bellen ís het werk claimen, en
-      // een lead die je gebeld hebt zonder eigenaar zou een collega zo kunnen
-      // overnemen inclusief de commissie.
-      ownerId: lead.ownerId ?? user.id,
-      ...(lead.ownerId ? {} : { ownedAt: new Date() }),
-    },
-  });
-  await audit(user.id, "call.logged", "lead", leadId, { outcome });
-
-  revalidatePath("/calls");
   revalidatePath("/leads");
+  revalidatePath("/mijn-leads");
   revalidatePath("/");
-  redirect(parsed.nextLeadId ? `/calls?lead=${parsed.nextLeadId}` : "/calls");
+  redirect(`/leads/${parsed.leadId}`);
 }
 
 export async function createLead(formData: FormData) {
@@ -261,7 +214,6 @@ export async function createLead(formData: FormData) {
   await audit(user.id, "lead.created", "lead", lead.id);
 
   revalidatePath("/leads");
-  revalidatePath("/calls");
   revalidatePath("/");
 }
 
@@ -296,7 +248,6 @@ export async function contactLead(leadId: string) {
   });
   await audit(user.id, "lead.contact_approved", "lead", id);
   revalidatePath("/leads");
-  revalidatePath("/calls");
   revalidatePath("/");
 }
 
@@ -323,7 +274,6 @@ export async function skipLead(leadId: string) {
   // Store the previous status so a skip is restorable, not just reversible.
   await audit(user.id, "lead.skipped", "lead", id, { previousStatus: lead.status });
   revalidatePath("/leads");
-  revalidatePath("/calls");
   revalidatePath("/");
 }
 
@@ -349,7 +299,6 @@ export async function unskipLead(leadId: string) {
   });
   await audit(user.id, "lead.unskipped", "lead", id);
   revalidatePath("/leads");
-  revalidatePath("/calls");
   revalidatePath("/");
 }
 
@@ -429,7 +378,6 @@ export async function markLeadWon(formData: FormData) {
 
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/leads");
-  revalidatePath("/calls");
   revalidatePath("/team");
   revalidatePath("/");
 }
@@ -449,6 +397,10 @@ export async function saveSettings(formData: FormData) {
       placesApiKey: String(formData.get("placesApiKey") ?? ""),
       openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
       openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
+      anthropicApiKey: String(formData.get("anthropicApiKey") ?? ""),
+      anthropicModel: String(
+        formData.get("anthropicModel") || "claude-opus-5"
+      ),
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
@@ -460,6 +412,10 @@ export async function saveSettings(formData: FormData) {
       placesApiKey: String(formData.get("placesApiKey") ?? ""),
       openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
       openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
+      anthropicApiKey: String(formData.get("anthropicApiKey") ?? ""),
+      anthropicModel: String(
+        formData.get("anthropicModel") || "claude-opus-5"
+      ),
       detectionCategories: JSON.stringify(categories),
       enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
       exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
@@ -491,5 +447,4 @@ export async function setLeadCompliance(formData: FormData) {
   });
   await audit(user.id, "lead.compliance_changed", "lead", input.leadId, input);
   revalidatePath(`/leads/${input.leadId}`);
-  revalidatePath("/calls");
 }

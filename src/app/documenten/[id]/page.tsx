@@ -70,7 +70,7 @@ export default async function DocumentPage({
               Naar de lead
             </Link>
           )}
-          <Link href="/mijn-leads" className="btn btn-ghost">
+          <Link href="/" className="btn btn-ghost">
             Mijn leads
           </Link>
         </div>

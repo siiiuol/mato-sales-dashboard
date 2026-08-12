@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { buildMailPrompt, SYSTEM_PROMPT } from "../src/lib/mail-prompt";
-import { draftMail } from "../src/lib/openai";
+import { draftMail } from "../src/lib/anthropic";
 
 /**
  * Stelt één mail op tegen de echte API, om te zien wat er werkelijk uit komt.
@@ -43,8 +43,8 @@ async function main() {
 
   const started = Date.now();
   const draft = await draftMail({
-    apiKey: settings?.openAiApiKey ?? "",
-    model: settings?.openAiModel || "gpt-4o-mini",
+    apiKey: settings?.anthropicApiKey ?? "",
+    model: settings?.anthropicModel || "claude-sonnet-4-20250514",
     system: SYSTEM_PROMPT,
     prompt,
   });

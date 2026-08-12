@@ -1,17 +1,17 @@
-# MATO — lead search, calling, logging
+# MATO — leads zoeken, claimen, contacteren
 
-One job: find local businesses worth calling, decide who to call, dial them,
-write down what happened.
+Eén job: lokale zaken vinden die de moeite waard zijn, op je naam zetten,
+contacteren, en opschrijven wat er gebeurde.
 
 ```
-Search  →  Triage  →  Call  →  Log
+Zoeken  →  Claimen  →  Contacteren  →  Noteren (op de fiche)
 ```
 
 | | |
 |---|---|
 | Stack | Next.js · Prisma · SQLite |
 | Port | 3000 |
-| Screens | Work (`/`), Leads (`/leads`), Calls (`/calls`), Settings (`/settings`) |
+| Screens | Mijn leads (`/`), Leads (`/leads`), Settings (`/settings`) |
 
 ## Setup
 
@@ -40,15 +40,15 @@ With a Google Places key in Settings this takes about a minute per province and
 roughly 90% of results carry a phone number. Without one it falls back to
 OpenStreetMap: free, but slower, patchier, and only ~30% have phones.
 
-**Triage** — every new business waits for your decision. **Contact** puts it on
-the call list; **Skip** hides it. Nothing is deleted: skipped leads stay under
-`/leads?status=SKIPPED` and can be unskipped.
+**Triage** — every new business waits for your decision. **Interessant** keeps
+it for follow-up; **Skip** hides it. Nothing is deleted: skipped leads stay
+under `/leads?status=SKIPPED` and can be unskipped.
 
-**Call** — the call card shows the number as a `tel:` link with an opener,
-angle, suggested machine, questions and the likely objection.
+**Claim** — press *Aan mijn leads toevoegen*. The lead is yours (commission
+protection) and you land on the company fiche.
 
-**Log** — record the outcome. Callbacks set a follow-up date and the lead
-returns to the queue then. The next lead loads automatically.
+**Contact** — on the fiche, log a call, email, visit or note. Mail drafts and
+contracts live there too. Everything shows up in one history timeline.
 
 ## Things worth knowing
 
@@ -70,7 +70,8 @@ returns to the queue then. The next lead loads automatically.
 The Places key lives in **Settings**, stored in the database — never in a
 committed file. It needs *Places API (New)* enabled on the Google Cloud project
 plus an active billing account; the legacy Places endpoints no longer work for
-projects created after March 2025.
+projects created after March 2025. Mail drafting uses an Anthropic key in
+Settings.
 
 ## Scripts
 

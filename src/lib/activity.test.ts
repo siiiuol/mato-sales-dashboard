@@ -159,7 +159,55 @@ test("counts are per kind and add up to the total", () => {
   assert.equal(counts.call, 2);
   assert.equal(counts.mail, 1);
   assert.equal(counts.document, 0);
-  assert.equal(counts.call + counts.mail + counts.document + counts.lead, items.length);
+  assert.equal(
+    counts.call +
+      counts.email +
+      counts.visit +
+      counts.note +
+      counts.mail +
+      counts.document +
+      counts.lead,
+    items.length
+  );
+});
+
+test("email visit and note get their own labels", () => {
+  const items = buildActivity({
+    ...EMPTY,
+    outreach: [
+      {
+        id: "e",
+        createdAt: at("2026-08-11T10:00:00Z"),
+        type: "EMAIL",
+        outcome: "SENT",
+        note: null,
+        createdBy: { name: "Jonas" },
+      },
+      {
+        id: "v",
+        createdAt: at("2026-08-10T10:00:00Z"),
+        type: "VISIT",
+        outcome: "INTERESTED",
+        note: "Was open",
+        createdBy: { name: "Jonas" },
+      },
+      {
+        id: "n",
+        createdAt: at("2026-08-09T10:00:00Z"),
+        type: "NOTE",
+        outcome: null,
+        note: "Terugbellen na Pasen",
+        createdBy: { name: "Jonas" },
+      },
+    ],
+  });
+  assert.equal(items[0].title, "Gemaild — Verstuurd");
+  assert.equal(items[0].kind, "email");
+  assert.equal(items[1].title, "Bezocht — Interesse");
+  assert.equal(items[1].kind, "visit");
+  assert.equal(items[2].title, "Notitie");
+  assert.equal(items[2].kind, "note");
+  assert.equal(items[2].detail, "Terugbellen na Pasen");
 });
 
 test("a lead with no history yields an empty timeline, not a crash", () => {

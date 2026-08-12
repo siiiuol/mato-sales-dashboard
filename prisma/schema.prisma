@@ -757,6 +757,10 @@ model AppSettings {
   /// Instelbaar, want OpenAI brengt regelmatig nieuwe modellen uit en dan hoeft
   /// er geen nieuwe versie van de app voor.
   openAiModel         String @default("gpt-4o-mini")
+  /// Anthropic-sleutel voor mailopstellen. Staat in de database, nooit in code.
+  anthropicApiKey     String @default("")
+  /// Instelbaar model-id (bv. claude-opus-5).
+  anthropicModel      String @default("claude-opus-5")
   /// Moet gelijk lopen met DEFAULT_DETECTION_CATEGORIES in src/lib/constants.ts.
   detectionCategories String @default("[\"bakery\",\"patisserie\",\"butcher\",\"chocolatier\",\"ice cream\",\"traiteur\",\"cheese\",\"farm shop\",\"takeaway\"]")
   enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")

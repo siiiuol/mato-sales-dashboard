@@ -1,15 +1,27 @@
-import { CALL_OUTCOMES } from "./constants";
+import {
+  CALL_OUTCOMES,
+  EMAIL_OUTCOMES,
+  VISIT_OUTCOMES,
+  contactTypeLabel,
+} from "./constants";
 
 /**
  * Alles wat er met een lead gebeurd is, op één tijdlijn.
  *
- * De bronnen liggen uit elkaar — gesprekken in `OutreachEvent`, mails in
+ * De bronnen liggen uit elkaar — contacten in `OutreachEvent`, mails in
  * `EmailDraft`, contracten in `GeneratedDocument`, de rest in `AuditEvent` — en
  * dat is prima om op te slaan, maar niet om te lezen. Hier komen ze samen in de
  * volgorde waarin het gebeurd is.
  */
 
-export type ActivityKind = "call" | "mail" | "document" | "lead";
+export type ActivityKind =
+  | "call"
+  | "email"
+  | "visit"
+  | "note"
+  | "mail"
+  | "document"
+  | "lead";
 
 export type ActivityItem = {
   id: string;
@@ -66,6 +78,7 @@ export type ActivitySources = {
  */
 const COVERED_BY_RICHER_SOURCE = new Set([
   "call.logged",
+  "contact.logged",
   "document.generated",
   "mail.drafted",
   "mail.approved",
@@ -78,7 +91,7 @@ const AUDIT_LABELS: Record<string, string> = {
   "lead.reassigned": "Toegewezen aan iemand anders",
   "lead.won": "Verkocht",
   "lead.created": "Handmatig toegevoegd",
-  "lead.contact_approved": "Goedgekeurd om te bellen",
+  "lead.contact_approved": "Interessant bevonden",
   "lead.skipped": "Overgeslagen",
   "lead.unskipped": "Teruggezet naar de selectie",
   "lead.compliance_changed": "Toestemming aangepast",
@@ -86,12 +99,11 @@ const AUDIT_LABELS: Record<string, string> = {
   "mail.discarded": "Mailconcept verwijderd",
 };
 
-// Als `Map<string, string>` en niet met de smalle sleutels van CALL_OUTCOMES:
-// wat er in de database staat is gewoon tekst, en oude rijen kunnen een waarde
-// bevatten die inmiddels uit de lijst verdwenen is.
-const OUTCOME_LABELS = new Map<string, string>(
-  CALL_OUTCOMES.map((o) => [o.value as string, o.label])
-);
+const OUTCOME_LABELS = new Map<string, string>([
+  ...CALL_OUTCOMES.map((o) => [o.value as string, o.label] as const),
+  ...EMAIL_OUTCOMES.map((o) => [o.value as string, o.label] as const),
+  ...VISIT_OUTCOMES.map((o) => [o.value as string, o.label] as const),
+]);
 
 const DRAFT_STATUS_LABELS: Record<string, string> = {
   PREPARED: "opgesteld",
@@ -106,18 +118,30 @@ const DOCUMENT_STATUS_LABELS: Record<string, string> = {
   SIGNED: "getekend",
 };
 
+function outreachKind(type: string): ActivityKind {
+  if (type === "EMAIL") return "email";
+  if (type === "VISIT") return "visit";
+  if (type === "NOTE") return "note";
+  return "call";
+}
+
+function outreachTitle(type: string, outcome: string | null): string {
+  const typeLabel = contactTypeLabel(type);
+  if (type === "NOTE") return typeLabel;
+  if (!outcome) return typeLabel;
+  const outcomeLabel = OUTCOME_LABELS.get(outcome) ?? outcome;
+  return `${typeLabel} — ${outcomeLabel}`;
+}
+
 export function buildActivity(sources: ActivitySources): ActivityItem[] {
   const items: ActivityItem[] = [];
 
   for (const event of sources.outreach) {
-    const outcome = event.outcome
-      ? (OUTCOME_LABELS.get(event.outcome) ?? event.outcome)
-      : null;
     items.push({
-      id: `call-${event.id}`,
+      id: `outreach-${event.id}`,
       at: event.createdAt,
-      kind: "call",
-      title: outcome ? `Gebeld — ${outcome}` : "Gebeld",
+      kind: outreachKind(event.type),
+      title: outreachTitle(event.type, event.outcome),
       detail: event.note,
       actor: event.createdBy?.name ?? null,
     });
@@ -155,8 +179,6 @@ export function buildActivity(sources: ActivitySources): ActivityItem[] {
       id: `audit-${audit.id}`,
       at: audit.createdAt,
       kind: "lead",
-      // Onbekende handelingen krijgen hun ruwe naam in plaats van weggelaten te
-      // worden: een gat in de geschiedenis is erger dan een lelijke regel.
       title: AUDIT_LABELS[audit.action] ?? audit.action,
       detail: readableDetail(audit.detail),
       actor: audit.actor?.name ?? null,
@@ -180,8 +202,6 @@ export function readableDetail(raw: string | null): string | null {
     const parts = Object.entries(parsed as Record<string, unknown>)
       .filter(([key, value]) => {
         if (value === null || value === undefined || value === "") return false;
-        // Interne verwijzingen horen wel in het logboek maar niet op het
-        // scherm: "dealId: cmsos0e88000g6ywv0vjctfe5" zegt een mens niets.
         return !isIdentifier(key, value);
       })
       .map(([key, value]) => `${DETAIL_LABELS[key] ?? key}: ${value}`);
@@ -191,12 +211,6 @@ export function readableDetail(raw: string | null): string | null {
   }
 }
 
-/**
- * Herkent verwijzingen naar andere rijen.
- *
- * Op de sleutel én op de vorm van de waarde: `to` heet niet naar een id maar
- * bevat er wel een, en een cuid is aan zijn vaste vorm te herkennen.
- */
 function isIdentifier(key: string, value: unknown): boolean {
   if (/Id$/.test(key) || key === "to" || key === "previousOwner") return true;
   return typeof value === "string" && /^c[a-z0-9]{20,}$/.test(value);
@@ -204,6 +218,7 @@ function isIdentifier(key: string, value: unknown): boolean {
 
 const DETAIL_LABELS: Record<string, string> = {
   outcome: "resultaat",
+  type: "soort",
   previousStatus: "was",
   value: "bedrag",
   product: "product",
@@ -217,10 +232,20 @@ const DETAIL_LABELS: Record<string, string> = {
 export function activityCounts(items: ActivityItem[]): Record<ActivityKind, number> {
   const counts: Record<ActivityKind, number> = {
     call: 0,
+    email: 0,
+    visit: 0,
+    note: 0,
     mail: 0,
     document: 0,
     lead: 0,
   };
   for (const item of items) counts[item.kind]++;
   return counts;
+}
+
+/** Kort overzicht voor de kop van de fiche. */
+export function contactCount(items: ActivityItem[]): number {
+  return items.filter((i) =>
+    i.kind === "call" || i.kind === "email" || i.kind === "visit" || i.kind === "note"
+  ).length;
 }

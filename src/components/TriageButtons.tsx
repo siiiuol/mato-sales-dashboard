@@ -59,7 +59,7 @@ export function TriageButtons({
           disabled={pending}
           onClick={run(contactAction)}
         >
-          Bellen
+          Interessant
         </button>
       )}
       <button

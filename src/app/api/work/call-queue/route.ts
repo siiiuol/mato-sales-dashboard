@@ -50,6 +50,7 @@ export async function GET() {
         discoveryQuestions: true,
         likelyObjection: true,
         evidenceSummary: true,
+        status: true,
       },
     });
 

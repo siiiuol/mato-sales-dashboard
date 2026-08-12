@@ -84,7 +84,7 @@ export function EmployeeForm() {
         />
       </Field>
 
-      <Field label="Rol" hint="Verkoop ziet alleen Werk, Leads en Bellen.">
+      <Field label="Rol" hint="Verkoop ziet Mijn leads en Leads.">
         <select name="role" className="select" defaultValue="sales">
           <option value="sales">Verkoop</option>
           <option value="reviewer">Meelezer</option>

@@ -7,7 +7,7 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { audit, requireUser } from "./dal";
 import { buildMailPrompt, SYSTEM_PROMPT } from "./mail-prompt";
-import { draftMail, OpenAiConfigError } from "./openai";
+import { draftMail, AnthropicConfigError } from "./anthropic";
 import { formObject, idSchema } from "./validation";
 
 export type MailDraftState = {
@@ -114,8 +114,8 @@ export async function generateMailDraft(
 
   try {
     const draft = await draftMail({
-      apiKey: settings?.openAiApiKey ?? "",
-      model: settings?.openAiModel || "gpt-4o-mini",
+      apiKey: settings?.anthropicApiKey ?? "",
+      model: settings?.anthropicModel || "claude-opus-5",
       system: SYSTEM_PROMPT,
       prompt,
     });
@@ -139,7 +139,7 @@ export async function generateMailDraft(
     revalidatePath(`/leads/${lead.id}`);
     return { subject: draft.subject, body: draft.body, draftId: saved.id };
   } catch (err) {
-    if (err instanceof OpenAiConfigError) return { error: err.message };
+    if (err instanceof AnthropicConfigError) return { error: err.message };
     throw err;
   }
 }

@@ -1,8 +1,6 @@
 export const NAV = [
-  { href: "/", label: "Werk" },
-  { href: "/mijn-leads", label: "Mijn leads" },
+  { href: "/", label: "Mijn leads" },
   { href: "/leads", label: "Leads" },
-  { href: "/calls", label: "Bellen" },
 ] as const;
 
 /**
@@ -31,12 +29,19 @@ export const COMMISSION_TYPE_LABELS: Record<string, string> = {
   FIXED: "Vast bedrag per verkoop",
 };
 
-/** Selecteren → Bellen → Noteren is een echte volgorde, dus genummerd. */
-export const WORK_STEPS = [
-  { id: "review", code: "1", label: "Selecteren" },
-  { id: "call", code: "2", label: "Bellen" },
-  { id: "log", code: "3", label: "Noteren" },
+/** Hoe je iemand hebt bereikt — niet alleen bellen. */
+export const CONTACT_TYPES = [
+  { value: "CALL", label: "Gebeld" },
+  { value: "EMAIL", label: "Gemaild" },
+  { value: "VISIT", label: "Bezocht" },
+  { value: "NOTE", label: "Notitie" },
 ] as const;
+
+export type ContactType = (typeof CONTACT_TYPES)[number]["value"];
+
+export function contactTypeLabel(type: string) {
+  return CONTACT_TYPES.find((t) => t.value === type)?.label ?? type;
+}
 
 /**
  * Wat er standaard doorzocht wordt — de enige echte lijst.
@@ -565,8 +570,41 @@ export const CALL_OUTCOMES = [
   { value: "WRONG_NUMBER", label: "Verkeerd nummer" },
   { value: "INTERESTED", label: "Interesse" },
   { value: "NOT_INTERESTED", label: "Geen interesse" },
-  { value: "CALLBACK", label: "Terugbellen" },
+  { value: "CALLBACK", label: "Opvolgen" },
 ] as const;
+
+export const EMAIL_OUTCOMES = [
+  { value: "SENT", label: "Verstuurd" },
+  { value: "NO_REPLY", label: "Geen antwoord" },
+  { value: "INTERESTED", label: "Interesse" },
+  { value: "NOT_INTERESTED", label: "Geen interesse" },
+  { value: "CALLBACK", label: "Opvolgen" },
+] as const;
+
+export const VISIT_OUTCOMES = [
+  { value: "INTERESTED", label: "Interesse" },
+  { value: "NOT_INTERESTED", label: "Geen interesse" },
+  { value: "CALLBACK", label: "Opvolgen" },
+  { value: "OTHER", label: "Anders" },
+] as const;
+
+/** Alle mogelijke resultaten, voor labels in de geschiedenis. */
+const ALL_OUTCOME_LABELS = new Map<string, string>([
+  ...CALL_OUTCOMES.map((o) => [o.value, o.label] as const),
+  ...EMAIL_OUTCOMES.map((o) => [o.value, o.label] as const),
+  ...VISIT_OUTCOMES.map((o) => [o.value, o.label] as const),
+]);
+
+export function outcomeLabel(value: string) {
+  return ALL_OUTCOME_LABELS.get(value) ?? value;
+}
+
+export function outcomesForType(type: string) {
+  if (type === "EMAIL") return EMAIL_OUTCOMES;
+  if (type === "VISIT") return VISIT_OUTCOMES;
+  if (type === "NOTE") return [] as const;
+  return CALL_OUTCOMES;
+}
 
 export function formatEUR(value: number) {
   return new Intl.NumberFormat("nl-BE", {

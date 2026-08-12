@@ -190,7 +190,7 @@ export default async function LeadsPage({
           </p>
         </div>
         <Link href="/" className="btn">
-          Naar Werk
+          Mijn leads
         </Link>
       </div>
 

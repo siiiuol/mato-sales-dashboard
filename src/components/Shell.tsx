@@ -63,7 +63,7 @@ export function Shell({
               </span>
             </div>
           </div>
-          {/* Four links fit on a phone, so there is no menu to open. */}
+          {/* Two sales links plus logout fit on a phone without a menu. */}
           <nav className="flex flex-wrap items-center justify-end gap-1">
             {items.map((item) => (
               <Link

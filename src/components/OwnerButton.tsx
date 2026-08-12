@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 /**
@@ -9,6 +10,8 @@ import { useState, useTransition } from "react";
  * Het is met opzet zichtbaar van wie de lead is en niet alleen dat hij bezet
  * is: als twee mensen op commissie werken, hoort duidelijk te zijn wie waaraan
  * bezig is, anders wordt elk misverstand een discussie over geld.
+ *
+ * Na toevoegen ga je naar de bedrijfsfiche — daar noteer je contact.
  */
 export function OwnerButton({
   leadId,
@@ -29,18 +32,29 @@ export function OwnerButton({
   releaseAction: (id: string) => Promise<void>;
   compact?: boolean;
 }) {
+  const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState("");
   const size = compact ? "btn btn-sm" : "btn";
 
-  const run = (fn: (id: string) => Promise<void>) => () => {
+  const runTake = () => {
     setError("");
     start(async () => {
       try {
-        await fn(leadId);
+        await takeAction(leadId);
+        router.push(`/leads/${leadId}`);
       } catch (err) {
-        // Een mislukte overname is geen storing maar informatie: iemand was je
-        // voor. Die naam hoort de gebruiker te zien.
+        setError(err instanceof Error ? err.message : "Dat is niet gelukt");
+      }
+    });
+  };
+
+  const runRelease = () => {
+    setError("");
+    start(async () => {
+      try {
+        await releaseAction(leadId);
+      } catch (err) {
         setError(err instanceof Error ? err.message : "Dat is niet gelukt");
       }
     });
@@ -60,7 +74,7 @@ export function OwnerButton({
             type="button"
             className={`${size} btn-ghost`}
             disabled={pending}
-            onClick={run(releaseAction)}
+            onClick={runRelease}
           >
             Vrijgeven
           </button>
@@ -82,7 +96,7 @@ export function OwnerButton({
           type="button"
           className={`${size} btn-ghost`}
           disabled={pending}
-          onClick={run(releaseAction)}
+          onClick={runRelease}
         >
           Teruggeven
         </button>
@@ -101,7 +115,7 @@ export function OwnerButton({
         type="button"
         className={`${size} btn-primary`}
         disabled={pending}
-        onClick={run(takeAction)}
+        onClick={runTake}
       >
         {pending ? "Bezig…" : "Aan mijn leads toevoegen"}
       </button>

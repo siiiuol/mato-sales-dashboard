@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
-import { apiError, audit, requireUser } from "@/lib/dal";
+import { apiError, requireUser } from "@/lib/dal";
+import { logCallForLead } from "@/lib/call-log";
 import { callOutcomeSchema, formObject, idSchema } from "@/lib/validation";
-import type { LeadStatus } from "@/lib/types";
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 
@@ -22,66 +21,17 @@ export async function POST(request: Request) {
       })
       .parse(formObject(formData));
 
-    const lead = await prisma.lead.findUnique({
-      where: { id: parsed.leadId },
-      select: {
-        doNotContact: true,
-        complianceStatus: true,
-      },
-    });
-    if (!lead) {
-      return NextResponse.json({ error: "Lead niet gevonden" }, { status: 404 });
-    }
-    if (lead.doNotContact || lead.complianceStatus === "BLOCKED") {
-      return NextResponse.json({ error: "Geblokkeerd: mag niet gecontacteerd worden" }, { status: 403 });
-    }
-
-    const nextFollowUpAt =
-      parsed.outcome === "CALLBACK" && parsed.callbackAt
-        ? new Date(parsed.callbackAt)
-        : null;
-
-    let status: LeadStatus = "CONTACTED";
-    if (parsed.outcome === "INTERESTED") status = "NEGOTIATION";
-    if (parsed.outcome === "NOT_INTERESTED") status = "LOST";
-    if (
-      parsed.outcome === "CALLBACK" ||
-      parsed.outcome === "VOICEMAIL" ||
-      parsed.outcome === "NO_ANSWER"
-    ) {
-      status = "FOLLOW_UP";
-    }
-    if (parsed.outcome === "WRONG_NUMBER") status = "DO_NOT_CONTACT";
-
-    await prisma.outreachEvent.create({
-      data: {
-        leadId: parsed.leadId,
-        type: "CALL",
-        outcome: parsed.outcome,
-        note: parsed.note || null,
-        nextFollowUpAt: nextFollowUpAt ?? undefined,
-        createdById: user.id,
-      },
-    });
-
-    await prisma.lead.update({
-      where: { id: parsed.leadId },
-      data: {
-        status,
-        nextActionAt:
-          nextFollowUpAt ??
-          (status === "FOLLOW_UP" ? new Date(Date.now() + 86400000) : null),
-        lastTouchedAt: new Date(),
-      },
-    });
-    await audit(user.id, "call.logged", "lead", parsed.leadId, {
+    await logCallForLead({
+      leadId: parsed.leadId,
       outcome: parsed.outcome,
+      note: parsed.note,
+      callbackAt: parsed.callbackAt,
+      userId: user.id,
     });
-
 
     revalidatePath("/");
-    revalidatePath("/calls");
     revalidatePath("/leads");
+    revalidatePath("/mijn-leads");
 
     return NextResponse.json({
       ok: true,
@@ -90,6 +40,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ error: "Invalid call log" }, { status: 400 });
+    }
+    if (error instanceof Error && error.message.includes("Geblokkeerd")) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    if (error instanceof Error && error.message.includes("niet gevonden")) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
     }
     return apiError(error);
   }

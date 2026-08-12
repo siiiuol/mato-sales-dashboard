@@ -91,15 +91,15 @@ export default async function SettingsPage() {
 
         <div>
           <label className="label block mb-1">
-            OpenAI API-sleutel (voor het opstellen van mails)
+            Anthropic API-sleutel (voor het opstellen van mails)
           </label>
           <input
-            name="openAiApiKey"
+            name="anthropicApiKey"
             className="input mono"
             type="password"
             autoComplete="off"
             placeholder="Leeg = geen mails opstellen"
-            defaultValue={settings.openAiApiKey || ""}
+            defaultValue={settings.anthropicApiKey || ""}
           />
           <p className="text-xs text-[var(--text-dim)] mt-1">
             Staat in de database, nooit in de code. Zonder sleutel werkt de rest
@@ -109,16 +109,16 @@ export default async function SettingsPage() {
         </div>
 
         <div>
-          <label className="label block mb-1">OpenAI-model</label>
+          <label className="label block mb-1">Anthropic-model</label>
           <input
-            name="openAiModel"
+            name="anthropicModel"
             className="input mono"
-            placeholder="gpt-4o-mini"
-            defaultValue={settings.openAiModel || ""}
+            placeholder="claude-opus-5"
+            defaultValue={settings.anthropicModel || ""}
           />
           <p className="text-xs text-[var(--text-dim)] mt-1">
-            Instelbaar omdat OpenAI regelmatig nieuwe modellen uitbrengt. Bestaat
-            het model niet voor jouw sleutel, dan zegt de foutmelding dat.
+            Instelbaar omdat Anthropic regelmatig nieuwe modellen uitbrengt.
+            Bestaat het model niet voor jouw sleutel, dan zegt de foutmelding dat.
           </p>
         </div>
 
