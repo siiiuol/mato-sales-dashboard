@@ -10,6 +10,8 @@ import { audit, requireUser } from "./dal";
 import { claimableWhere } from "./claims";
 import { callOutcomeSchema, formObject, idSchema } from "./validation";
 import { logCallForLead } from "./call-log";
+import { encryptSecret } from "./secrets";
+import { definedOnly, nextPlainValue, nextSecretValue } from "./settings-fields";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
 
@@ -384,47 +386,62 @@ export async function markLeadWon(formData: FormData) {
 
 export async function saveSettings(formData: FormData) {
   const user = await requireUser(["admin"]);
-  const categories = String(formData.get("categories") ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const zones = formData.getAll("zones").map(String);
+
+  /** `null` als het veld niet op dit formulier stond — dan blijft het ongemoeid. */
+  const field = (name: string) =>
+    formData.has(name) ? String(formData.get(name) ?? "") : null;
+  const secret = (name: string) =>
+    nextSecretValue({
+      submitted: field(name),
+      clear: formData.get(`${name}_clear`) === "on",
+    });
+
+  const categories = formData.has("categories")
+    ? String(formData.get("categories") ?? "")
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : null;
+  const zones = formData.has("zones_present")
+    ? formData.getAll("zones").map(String)
+    : null;
+  const radius = field("exclusionRadiusKm");
+
+  const changes = definedOnly({
+    businessName: nextPlainValue(field("businessName")) || undefined,
+    // Geheimen: leeg laten betekent laten staan. Zie settings-fields.ts.
+    placesApiKey: secret("placesApiKey"),
+    anthropicApiKey: secret("anthropicApiKey"),
+    anthropicModel: nextPlainValue(field("anthropicModel")) || undefined,
+    msClientId: nextPlainValue(field("msClientId")),
+    msTenantId: nextPlainValue(field("msTenantId")),
+    // Het enige geheim dat versleuteld de database in gaat; de twee id's
+    // hierboven zijn openbaar en staan sowieso in elke autorisatie-URL.
+    msClientSecret: encryptedSecret(secret("msClientSecret")),
+    detectionCategories: categories ? JSON.stringify(categories) : undefined,
+    enabledZones: zones
+      ? JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES])
+      : undefined,
+    exclusionRadiusKm:
+      radius !== null && radius !== "" ? Number(radius) : undefined,
+    pitchTemplates: nextPlainValue(field("pitchTemplates")),
+  });
 
   await prisma.appSettings.upsert({
     where: { id: "default" },
-    update: {
-      businessName: String(formData.get("businessName") ?? "MATO"),
-      placesApiKey: String(formData.get("placesApiKey") ?? ""),
-      openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
-      openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
-      anthropicApiKey: String(formData.get("anthropicApiKey") ?? ""),
-      anthropicModel: String(
-        formData.get("anthropicModel") || "claude-opus-5"
-      ),
-      detectionCategories: JSON.stringify(categories),
-      enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
-      exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
-      pitchTemplates: String(formData.get("pitchTemplates") ?? "{}"),
-    },
-    create: {
-      id: "default",
-      businessName: String(formData.get("businessName") ?? "MATO"),
-      placesApiKey: String(formData.get("placesApiKey") ?? ""),
-      openAiApiKey: String(formData.get("openAiApiKey") ?? ""),
-      openAiModel: String(formData.get("openAiModel") || "gpt-4o-mini"),
-      anthropicApiKey: String(formData.get("anthropicApiKey") ?? ""),
-      anthropicModel: String(
-        formData.get("anthropicModel") || "claude-opus-5"
-      ),
-      detectionCategories: JSON.stringify(categories),
-      enabledZones: JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES]),
-      exclusionRadiusKm: Number(formData.get("exclusionRadiusKm") ?? 0.5),
-    },
+    update: changes,
+    create: { id: "default", ...changes },
   });
 
   revalidatePath("/settings");
   revalidatePath("/");
   await audit(user.id, "settings.updated", "settings", "default");
+}
+
+/** Versleutelt alleen als er iets nieuws is; laat "niet aanraken" met rust. */
+function encryptedSecret(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return value === "" ? "" : encryptSecret(value);
 }
 
 export async function setLeadCompliance(formData: FormData) {

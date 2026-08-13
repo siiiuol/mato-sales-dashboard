@@ -82,9 +82,49 @@ model Lead {
   emailDrafts EmailDraft[]
   contacts    Contact[]
   documents   GeneratedDocument[]
+  mail        MailMessage[]
 
   @@index([claimedById])
   @@index([ownerId])
+}
+
+/// Elke mail die echt vertrokken of binnengekomen is, per lead.
+///
+/// Los van EmailDraft: dat is het klad dat bewerkt en weggegooid mag worden,
+/// dit is het bewijs van wat er verstuurd is en wat er terugkwam. Samen met de
+/// belnotities vormt dit de volledige geschiedenis van één zaak.
+model MailMessage {
+  id        String @id @default(cuid())
+  leadId    String
+  /// Vanuit wiens postvak. Blijft leeg als de medewerker verwijderd is.
+  userId    String?
+  /// UIT of IN — verstuurd door ons, of een antwoord van de prospect.
+  direction String @default("OUT")
+
+  subject     String
+  body        String @default("")
+  fromAddress String @default("")
+  toAddress   String @default("")
+
+  /// Wanneer hij verstuurd of ontvangen is volgens Microsoft, niet wanneer wij
+  /// hem opsloegen — anders klopt de volgorde van een gesprek niet.
+  occurredAt DateTime @default(now())
+
+  /// Van Microsoft Graph. Uniek, zodat hetzelfde antwoord bij een tweede
+  /// ophaalronde niet nog een keer op de tijdlijn belandt.
+  graphMessageId String? @unique
+  /// Het gesprek waar deze mail bij hoort; hiermee worden antwoorden aan de
+  /// juiste lead gekoppeld.
+  conversationId String?
+  draftId        String?
+
+  createdAt DateTime @default(now())
+
+  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([leadId])
+  @@index([conversationId])
 }
 
 model OutreachEvent {
@@ -259,6 +299,8 @@ model User {
   creativeVersions  CreativeVersion[]
   brandAssets       BrandAsset[]
   emailDrafts       EmailDraft[]
+  mailbox           MailboxConnection?
+  mailSent          MailMessage[]
   templatesOwned    DocumentTemplate[] @relation("TemplateOwner")
   templatesApproved DocumentTemplate[] @relation("TemplateApprover")
   documentsCreated  GeneratedDocument[] @relation("DocumentCreator")
@@ -719,6 +761,28 @@ model EmailDraft {
   @@index([leadId])
 }
 
+/// De mailbox van één medewerker, gekoppeld via Microsoft 365.
+///
+/// Per medewerker één koppeling: mail vertrekt vanaf zijn eigen adres, zodat
+/// antwoorden in zijn gewone postvak binnenkomen en de ontvanger een bekende
+/// afzender ziet in plaats van een noreply-adres.
+model MailboxConnection {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  provider     String   @default("microsoft")
+  /// Het adres waarvandaan verstuurd wordt, zoals Microsoft het teruggeeft.
+  emailAddress String
+  /// Versleuteld — zie secrets.ts. Een refresh token opent een hele mailbox.
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  scope        String   @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 /// Aanmeldpogingen, voor snelheidsbegrenzing en om verdachte activiteit te zien.
 ///
 /// Bewust in de database en niet in het geheugen: op Vercel draait elke aanvraag
@@ -761,6 +825,14 @@ model AppSettings {
   anthropicApiKey     String @default("")
   /// Instelbaar model-id (bv. claude-opus-5).
   anthropicModel      String @default("claude-opus-5")
+
+  /// Microsoft Entra, voor het versturen vanaf de eigen mailbox.
+  ///
+  /// Client- en tenant-id zijn openbare identificatiegegevens en staan gewoon in
+  /// de kolom. Het geheim is versleuteld — zie secrets.ts.
+  msClientId          String @default("")
+  msTenantId          String @default("")
+  msClientSecret      String @default("")
   /// Moet gelijk lopen met DEFAULT_DETECTION_CATEGORIES in src/lib/constants.ts.
   detectionCategories String @default("[\"bakery\",\"patisserie\",\"butcher\",\"chocolatier\",\"ice cream\",\"traiteur\",\"cheese\",\"farm shop\",\"takeaway\"]")
   enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")

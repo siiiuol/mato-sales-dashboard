@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { activityCounts, buildActivity, readableDetail } from "./activity";
+import {
+  activityCounts,
+  buildActivity,
+  contactCount,
+  readableDetail,
+} from "./activity";
 
 const EMPTY = { outreach: [], drafts: [], documents: [], audits: [] };
 
@@ -151,7 +156,9 @@ test("counts are per kind and add up to the total", () => {
       { id: "o1", createdAt: at("2026-08-01T09:00:00Z"), type: "CALL", outcome: null, note: null },
       { id: "o2", createdAt: at("2026-08-02T09:00:00Z"), type: "CALL", outcome: null, note: null },
     ],
-    drafts: [{ id: "d", createdAt: at("2026-08-03T09:00:00Z"), subject: "x", status: "SENT" }],
+    drafts: [
+      { id: "d", createdAt: at("2026-08-03T09:00:00Z"), subject: "x", status: "PREPARED" },
+    ],
     documents: [],
     audits: [],
   });
@@ -160,15 +167,128 @@ test("counts are per kind and add up to the total", () => {
   assert.equal(counts.mail, 1);
   assert.equal(counts.document, 0);
   assert.equal(
-    counts.call +
-      counts.email +
-      counts.visit +
-      counts.note +
-      counts.mail +
-      counts.document +
-      counts.lead,
+    Object.values(counts).reduce((sum, n) => sum + n, 0),
     items.length
   );
+});
+
+test("a sent draft appears once, as the message that actually left", () => {
+  // Het concept blijft in de database staan, maar de verstuurde mail vertelt
+  // hetzelfde met adres en tekst erbij. Allebei tonen leest als twee mails.
+  const items = buildActivity({
+    ...EMPTY,
+    drafts: [
+      {
+        id: "d1",
+        createdAt: at("2026-08-03T09:00:00Z"),
+        subject: "Automaat bij De Zoete Zonde",
+        status: "SENT",
+      },
+    ],
+    mail: [
+      {
+        id: "m1",
+        occurredAt: at("2026-08-03T09:05:00Z"),
+        direction: "OUT",
+        subject: "Automaat bij De Zoete Zonde",
+        body: "Dag Jan, ik zag dat u afhaalmaaltijden verkoopt.",
+        fromAddress: "louis@matoautomaat.be",
+        toAddress: "info@zoetezonde.be",
+        user: { name: "Louis" },
+      },
+    ],
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "sent");
+  assert.match(items[0].detail ?? "", /info@zoetezonde\.be/);
+});
+
+test("an unsent draft still shows, so nobody forgets it is waiting", () => {
+  const items = buildActivity({
+    ...EMPTY,
+    drafts: [
+      { id: "d2", createdAt: at("2026-08-03T09:00:00Z"), subject: "Klaar", status: "PREPARED" },
+    ],
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].kind, "mail");
+});
+
+test("a reply is contact, a waiting draft is not", () => {
+  // "3 contacten" op de fiche moet betekenen dat er drie keer echt iets
+  // gebeurd is — niet dat er een tekst klaarstaat die nog niemand gezien heeft.
+  const items = buildActivity({
+    ...EMPTY,
+    drafts: [
+      { id: "d3", createdAt: at("2026-08-01T09:00:00Z"), subject: "Klaar", status: "PREPARED" },
+    ],
+    mail: [
+      {
+        id: "m2",
+        occurredAt: at("2026-08-02T09:00:00Z"),
+        direction: "OUT",
+        subject: "Voorstel",
+        body: "…",
+        fromAddress: "louis@matoautomaat.be",
+        toAddress: "info@zoetezonde.be",
+      },
+      {
+        id: "m3",
+        occurredAt: at("2026-08-03T09:00:00Z"),
+        direction: "IN",
+        subject: "Re: Voorstel",
+        body: "Bel me maandag.",
+        fromAddress: "info@zoetezonde.be",
+        toAddress: "louis@matoautomaat.be",
+      },
+    ],
+  });
+
+  assert.equal(contactCount(items), 2);
+  const counts = activityCounts(items);
+  assert.equal(counts.sent, 1);
+  assert.equal(counts.reply, 1);
+  assert.equal(counts.mail, 1);
+});
+
+test("an incoming reply names the sender, not the recipient", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    mail: [
+      {
+        id: "m4",
+        occurredAt: at("2026-08-03T09:00:00Z"),
+        direction: "IN",
+        subject: "Re: Voorstel",
+        body: "Graag een afspraak volgende week.",
+        fromAddress: "info@zoetezonde.be",
+        toAddress: "louis@matoautomaat.be",
+      },
+    ],
+  });
+  assert.equal(item.title, "Antwoord ontvangen");
+  assert.match(item.detail ?? "", /van info@zoetezonde\.be/);
+  assert.match(item.detail ?? "", /afspraak volgende week/);
+});
+
+test("a very long mail is shortened on the timeline", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    mail: [
+      {
+        id: "m5",
+        occurredAt: at("2026-08-03T09:00:00Z"),
+        direction: "IN",
+        subject: "Re: Voorstel",
+        body: "x".repeat(5000),
+        fromAddress: "info@zoetezonde.be",
+        toAddress: "louis@matoautomaat.be",
+      },
+    ],
+  });
+  assert.ok((item.detail ?? "").length < 300, "de tijdlijn mag niet volgestort worden");
+  assert.match(item.detail ?? "", /…$/);
 });
 
 test("email visit and note get their own labels", () => {

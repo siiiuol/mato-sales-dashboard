@@ -2,11 +2,21 @@ import { prisma } from "@/lib/db";
 import { saveSettings } from "@/lib/actions";
 import { FLANDERS_ZONES } from "@/lib/constants";
 import { requirePageUser } from "@/lib/dal";
+import { SecretField } from "@/components/SecretField";
+import { MailboxPanel } from "@/components/MailboxPanel";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
-  await requirePageUser(["admin"]);
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mailbox?: string; mailbox_ok?: string }>;
+}) {
+  const user = await requirePageUser(["admin"]);
+  const { mailbox: mailboxError, mailbox_ok: mailboxOk } = await searchParams;
+  const connection = await prisma.mailboxConnection.findUnique({
+    where: { userId: user.id },
+  });
   const settings = await prisma.appSettings.upsert({
     where: { id: "default" },
     update: {},
@@ -62,6 +72,13 @@ export default async function SettingsPage() {
         </p>
       </section>
 
+      <MailboxPanel
+        connection={connection}
+        error={mailboxError}
+        connected={mailboxOk}
+        configured={Boolean(settings.msClientId && settings.msTenantId && settings.msClientSecret)}
+      />
+
       <form action={saveSettings} className="panel p-4 sm:p-6 space-y-4">
         <div>
           <label className="label block mb-1">Bedrijfsnaam</label>
@@ -72,41 +89,19 @@ export default async function SettingsPage() {
           />
         </div>
 
-        <div>
-          <label className="label block mb-1">
-            Google Places API-sleutel (optioneel — leeg = gratis OpenStreetMap)
-          </label>
-          <input
-            name="placesApiKey"
-            className="input mono"
-            type="password"
-            autoComplete="off"
-            placeholder="Leeg = OpenStreetMap (gratis)"
-            defaultValue={settings.placesApiKey || ""}
-          />
-          <p className="text-xs text-[var(--text-dim)] mt-1">
-            Alleen nodig voor de betalende Google-dekking. Zoeken werkt ook zonder.
-          </p>
-        </div>
+        <SecretField
+          name="placesApiKey"
+          label="Google Places API-sleutel (optioneel — leeg = gratis OpenStreetMap)"
+          stored={settings.placesApiKey}
+          hint="Alleen nodig voor de betalende Google-dekking. Zoeken werkt ook zonder."
+        />
 
-        <div>
-          <label className="label block mb-1">
-            Anthropic API-sleutel (voor het opstellen van mails)
-          </label>
-          <input
-            name="anthropicApiKey"
-            className="input mono"
-            type="password"
-            autoComplete="off"
-            placeholder="Leeg = geen mails opstellen"
-            defaultValue={settings.anthropicApiKey || ""}
-          />
-          <p className="text-xs text-[var(--text-dim)] mt-1">
-            Staat in de database, nooit in de code. Zonder sleutel werkt de rest
-            van de app gewoon; alleen &ldquo;Mail opstellen&rdquo; op de leadfiche
-            valt weg.
-          </p>
-        </div>
+        <SecretField
+          name="anthropicApiKey"
+          label="Anthropic API-sleutel (voor het opstellen van mails)"
+          stored={settings.anthropicApiKey}
+          hint="Staat in de database, nooit in de code. Zonder sleutel werkt de rest van de app gewoon; alleen “Mail opstellen” op de leadfiche valt weg."
+        />
 
         <div>
           <label className="label block mb-1">Anthropic-model</label>
@@ -122,6 +117,52 @@ export default async function SettingsPage() {
           </p>
         </div>
 
+        <fieldset className="space-y-4 border-t border-[var(--line)] pt-4">
+          <legend className="label text-[var(--accent)]">
+            Microsoft 365 (voor het versturen van mail)
+          </legend>
+          <p className="text-xs text-[var(--text-dim)]">
+            Uit de app-registratie in Entra. De omleidings-URI daar moet exact{" "}
+            <span className="mono text-[var(--text)]">
+              {"<jouw-adres>"}/api/mail/callback
+            </span>{" "}
+            zijn, anders weigert Microsoft de koppeling.
+          </p>
+
+          <div>
+            <label className="label block mb-1" htmlFor="msTenantId">
+              Tenant-id
+            </label>
+            <input
+              id="msTenantId"
+              name="msTenantId"
+              className="input mono"
+              placeholder="00000000-0000-0000-0000-000000000000"
+              defaultValue={settings.msTenantId || ""}
+            />
+          </div>
+
+          <div>
+            <label className="label block mb-1" htmlFor="msClientId">
+              Client-id (toepassings-id)
+            </label>
+            <input
+              id="msClientId"
+              name="msClientId"
+              className="input mono"
+              placeholder="00000000-0000-0000-0000-000000000000"
+              defaultValue={settings.msClientId || ""}
+            />
+          </div>
+
+          <SecretField
+            name="msClientSecret"
+            label="Clientgeheim"
+            masked={settings.msClientSecret ? "•••••••• bewaard" : undefined}
+            hint="Versleuteld opgeslagen. Entra toont de waarde maar één keer, bij het aanmaken — vervalt hij, maak dan een nieuw geheim aan en plak dat hier."
+          />
+        </fieldset>
+
         <div>
           <label className="label block mb-1">Categorieën om te zoeken (komma-gescheiden)</label>
           <input
@@ -133,6 +174,9 @@ export default async function SettingsPage() {
 
         <div>
           <label className="label block mb-2">Actieve zones</label>
+          {/* Alle vakjes uitvinken stuurt niets mee; dit veld zegt dat de lijst
+              wél op het formulier stond, zodat "geen" ook echt geen betekent. */}
+          <input type="hidden" name="zones_present" value="1" />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {FLANDERS_ZONES.map((z) => (
               <label key={z} className="flex items-center gap-2 text-sm">

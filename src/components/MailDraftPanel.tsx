@@ -5,10 +5,13 @@ import {
   deleteMailDraft,
   generateMailDraft,
   saveMailDraft,
+  sendMailDraft,
   type MailDraftState,
+  type MailSendState,
 } from "@/lib/mail-actions";
 
 const EMPTY: MailDraftState = {};
+const EMPTY_SEND: MailSendState = {};
 
 type SavedDraft = {
   id: string;
@@ -20,19 +23,24 @@ type SavedDraft = {
 };
 
 /**
- * Mail opstellen, nalezen en bewaren.
+ * Mail opstellen, nalezen en versturen.
  *
- * Versturen zit hier bewust niet bij. De tekst komt van een model en gaat naar
- * een klant; die stap hoort een aparte, bewuste handeling te zijn en niet iets
- * wat gebeurt omdat je één keer te snel klikt.
+ * Versturen is een aparte, tweede handeling met het adres in beeld. De tekst
+ * komt van een model en gaat naar een klant; dat hoort niet te gebeuren omdat
+ * iemand één keer te snel klikt.
  */
 export function MailDraftPanel({
   leadId,
   hasWebsite,
+  leadEmail,
+  mailboxAddress,
   drafts,
 }: {
   leadId: string;
   hasWebsite: boolean;
+  leadEmail: string | null;
+  /** Het gekoppelde postvak van deze medewerker, of null. */
+  mailboxAddress: string | null;
   drafts: SavedDraft[];
 }) {
   const [state, action, pending] = useActionState(generateMailDraft, EMPTY);
@@ -78,45 +86,17 @@ export function MailDraftPanel({
       )}
 
       {shown && (
-        <form action={saveMailDraft} className="space-y-2">
-          <input type="hidden" name="draftId" value={shown.id} />
-          <label className="block">
-            <span className="label">Onderwerp</span>
-            <input
-              name="subject"
-              className="input mt-1"
-              defaultValue={shown.subject}
-              maxLength={300}
-              required
-            />
-          </label>
-          <label className="block">
-            <span className="label">Bericht</span>
-            <textarea
-              name="body"
-              className="textarea mt-1"
-              rows={12}
-              defaultValue={shown.body}
-              required
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn btn-primary">
-              Bewaren
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setEditing(null)}
-            >
-              Sluiten
-            </button>
-          </div>
-          <p className="text-xs text-[var(--text-dim)]">
-            Lees na op namen, bedragen en beloftes. Wat hier staat is opgesteld
-            door een taalmodel en kan iets beweren wat niet klopt.
-          </p>
-        </form>
+        // De sleutel hangt aan het concept: een ander concept openen bouwt de
+        // editor opnieuw op met die tekst erin. Dat scheelt een effect dat
+        // state overschrijft — en daarmee het risico dat een aanpassing die
+        // nog niet bewaard is onder je handen verdwijnt.
+        <DraftEditor
+          key={shown.id}
+          draft={shown}
+          leadEmail={leadEmail}
+          mailboxAddress={mailboxAddress}
+          onClose={() => setEditing(null)}
+        />
       )}
 
       {drafts.length > 0 && (
@@ -132,20 +112,154 @@ export function MailDraftPanel({
                 <span className="text-xs text-[var(--text-dim)]">
                   {draft.createdBy?.name ?? "onbekend"} ·{" "}
                   {new Date(draft.createdAt).toLocaleDateString("nl-BE")} ·{" "}
-                  {draft.status === "APPROVED" ? "nagelezen" : "concept"}
+                  {draft.status === "SENT"
+                    ? "verstuurd"
+                    : draft.status === "APPROVED"
+                      ? "nagelezen"
+                      : "concept"}
                 </span>
               </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost shrink-0"
-                onClick={() => void deleteMailDraft(draft.id)}
-              >
-                Weg
-              </button>
+              {draft.status !== "SENT" && (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost shrink-0"
+                  onClick={() => void deleteMailDraft(draft.id)}
+                >
+                  Weg
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+    </div>
+  );
+}
+
+/**
+ * Eén concept nalezen, bewaren en versturen.
+ *
+ * De tekst staat in state, niet alleen in het formulier: zo verstuurt de
+ * tweede knop exact wat er op het scherm staat, ook als er tussendoor niet
+ * bewaard is.
+ */
+function DraftEditor({
+  draft,
+  leadEmail,
+  mailboxAddress,
+  onClose,
+}: {
+  draft: SavedDraft;
+  leadEmail: string | null;
+  mailboxAddress: string | null;
+  onClose: () => void;
+}) {
+  const [sendState, sendAction, sending] = useActionState(sendMailDraft, EMPTY_SEND);
+  const [subject, setSubject] = useState(draft.subject);
+  const [body, setBody] = useState(draft.body);
+  const [confirming, setConfirming] = useState(false);
+
+  if (sendState.sent) {
+    return (
+      <p className="text-sm" style={{ color: "var(--ok)" }}>
+        Verstuurd naar {sendState.to}. Het antwoord verschijnt op de tijdlijn
+        zodra je op &ldquo;Antwoorden ophalen&rdquo; klikt.
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <form action={saveMailDraft} className="space-y-2">
+        <input type="hidden" name="draftId" value={draft.id} />
+        <label className="block">
+          <span className="label">Onderwerp</span>
+          <input
+            name="subject"
+            className="input mt-1"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            maxLength={300}
+            required
+          />
+        </label>
+        <label className="block">
+          <span className="label">Bericht</span>
+          <textarea
+            name="body"
+            className="textarea mt-1"
+            rows={12}
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            required
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button type="submit" className="btn">
+            Bewaren
+          </button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>
+            Sluiten
+          </button>
+        </div>
+      </form>
+
+      <div className="border-t border-[var(--border)] pt-3 space-y-2">
+        {!mailboxAddress ? (
+          <p className="text-xs text-[var(--text-dim)]">
+            Koppel je mailbox bij Instellingen om vanuit MATO te versturen.
+          </p>
+        ) : !confirming ? (
+          <button
+            type="button"
+            className="btn btn-primary w-full"
+            onClick={() => setConfirming(true)}
+            disabled={!subject.trim() || !body.trim()}
+          >
+            Versturen…
+          </button>
+        ) : (
+          <form action={sendAction} className="space-y-2">
+            <input type="hidden" name="draftId" value={draft.id} />
+            <input type="hidden" name="subject" value={subject} />
+            <input type="hidden" name="body" value={body} />
+            <label className="block">
+              <span className="label">Naar</span>
+              <input
+                name="to"
+                type="email"
+                className="input mt-1 mono"
+                defaultValue={leadEmail ?? ""}
+                placeholder="naam@zaak.be"
+                required
+              />
+            </label>
+            <p className="text-xs text-[var(--text-dim)]">
+              Vertrekt van <span className="mono">{mailboxAddress}</span>. Lees na
+              op namen, bedragen en beloftes — deze tekst is opgesteld door een
+              taalmodel en kan iets beweren wat niet klopt.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <button type="submit" className="btn btn-primary" disabled={sending}>
+                {sending ? "Bezig met versturen…" : "Nu versturen"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => setConfirming(false)}
+              >
+                Toch niet
+              </button>
+            </div>
+          </form>
+        )}
+
+        {sendState.error && (
+          <p className="text-sm" style={{ color: "var(--alert)" }}>
+            {sendState.error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

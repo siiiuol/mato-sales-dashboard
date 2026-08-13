@@ -15,6 +15,7 @@ import { TriageButtons } from "@/components/TriageButtons";
 import { OwnerButton } from "@/components/OwnerButton";
 import { ContractForm } from "@/components/ContractForm";
 import { MailDraftPanel } from "@/components/MailDraftPanel";
+import { ReplySyncButton } from "@/components/ReplySyncButton";
 import { ContactLogPanel } from "@/components/ContactLogPanel";
 import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
@@ -29,7 +30,9 @@ const TIMELINE_COLOURS: Record<string, string> = {
   email: "var(--ok)",
   visit: "var(--caution)",
   note: "var(--text-dim)",
-  mail: "var(--ok)",
+  mail: "var(--text-dim)",
+  sent: "var(--ok)",
+  reply: "var(--accent)",
   document: "var(--caution)",
   lead: "var(--border)",
 };
@@ -64,7 +67,7 @@ export default async function LeadDetailPage({
     },
   });
   if (!lead) notFound();
-  const [audits, products, documents, drafts] = await Promise.all([
+  const [audits, products, documents, drafts, mail, mailbox] = await Promise.all([
     prisma.auditEvent.findMany({
       where: { entityType: "lead", entityId: lead.id },
       orderBy: { createdAt: "desc" },
@@ -102,6 +105,25 @@ export default async function LeadDetailPage({
         createdBy: { select: { name: true } },
       },
     }),
+    prisma.mailMessage.findMany({
+      where: { leadId: lead.id },
+      orderBy: { occurredAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        direction: true,
+        subject: true,
+        body: true,
+        fromAddress: true,
+        toAddress: true,
+        occurredAt: true,
+        user: { select: { name: true } },
+      },
+    }),
+    prisma.mailboxConnection.findUnique({
+      where: { userId: user.id },
+      select: { emailAddress: true },
+    }),
   ]);
 
   const timeline = buildActivity({
@@ -109,6 +131,7 @@ export default async function LeadDetailPage({
     drafts,
     documents,
     audits,
+    mail,
   });
   const counts = activityCounts(timeline);
   const contacts = contactCount(timeline);
@@ -295,10 +318,15 @@ export default async function LeadDetailPage({
           </section>
 
           <section className="panel p-4 space-y-3">
-            <h2 className="label text-[var(--accent)]">Mail</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="label text-[var(--accent)]">Mail</h2>
+              {mailbox && <ReplySyncButton />}
+            </div>
             <MailDraftPanel
               leadId={lead.id}
               hasWebsite={Boolean(lead.website)}
+              leadEmail={lead.email}
+              mailboxAddress={mailbox?.emailAddress ?? null}
               drafts={drafts}
             />
           </section>
@@ -370,11 +398,9 @@ export default async function LeadDetailPage({
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
           <h2 className="label text-[var(--accent)]">Geschiedenis</h2>
           <p className="text-xs text-[var(--text-dim)]">
-            {counts.call + counts.email + counts.visit + counts.note} contact
-            {counts.call + counts.email + counts.visit + counts.note === 1
-              ? ""
-              : "en"}{" "}
-            · {counts.mail} {counts.mail === 1 ? "mail" : "mails"} ·{" "}
+            {contacts} contact{contacts === 1 ? "" : "en"} · {counts.sent}{" "}
+            {counts.sent === 1 ? "mail verstuurd" : "mails verstuurd"} ·{" "}
+            {counts.reply} {counts.reply === 1 ? "antwoord" : "antwoorden"} ·{" "}
             {counts.document}{" "}
             {counts.document === 1 ? "document" : "documenten"}
           </p>

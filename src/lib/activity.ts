@@ -19,7 +19,12 @@ export type ActivityKind =
   | "email"
   | "visit"
   | "note"
+  /** Een concept dat klaarstaat — nog geen contact. */
   | "mail"
+  /** Een mail die echt vertrokken is. */
+  | "sent"
+  /** Een antwoord van de prospect. */
+  | "reply"
   | "document"
   | "lead";
 
@@ -65,6 +70,17 @@ export type ActivitySources = {
     action: string;
     detail: string | null;
     actor?: Named;
+  }>;
+  /** Wat er echt verstuurd en ontvangen is. Optioneel: niet elke pagina laadt het. */
+  mail?: Array<{
+    id: string;
+    occurredAt: Date;
+    direction: string;
+    subject: string;
+    body: string;
+    fromAddress: string;
+    toAddress: string;
+    user?: Named;
   }>;
 };
 
@@ -148,6 +164,9 @@ export function buildActivity(sources: ActivitySources): ActivityItem[] {
   }
 
   for (const draft of sources.drafts) {
+    // Een verstuurd concept staat al als MailMessage op de tijdlijn, met het
+    // adres en de volledige tekst erbij. Twee keer is verwarrend.
+    if (draft.status === "SENT") continue;
     items.push({
       id: `mail-${draft.id}`,
       at: draft.createdAt,
@@ -155,6 +174,24 @@ export function buildActivity(sources: ActivitySources): ActivityItem[] {
       title: `Mail ${DRAFT_STATUS_LABELS[draft.status] ?? draft.status.toLowerCase()}`,
       detail: draft.subject,
       actor: draft.createdBy?.name ?? null,
+    });
+  }
+
+  for (const message of sources.mail ?? []) {
+    const incoming = message.direction === "IN";
+    items.push({
+      id: `msg-${message.id}`,
+      at: message.occurredAt,
+      kind: incoming ? "reply" : "sent",
+      title: incoming ? "Antwoord ontvangen" : "Mail verstuurd",
+      detail: [
+        message.subject,
+        incoming ? `van ${message.fromAddress}` : `naar ${message.toAddress}`,
+        firstLines(message.body),
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      actor: message.user?.name ?? null,
     });
   }
 
@@ -236,6 +273,8 @@ export function activityCounts(items: ActivityItem[]): Record<ActivityKind, numb
     visit: 0,
     note: 0,
     mail: 0,
+    sent: 0,
+    reply: 0,
     document: 0,
     lead: 0,
   };
@@ -243,9 +282,29 @@ export function activityCounts(items: ActivityItem[]): Record<ActivityKind, numb
   return counts;
 }
 
-/** Kort overzicht voor de kop van de fiche. */
+/** De eerste regels van een bericht, als voorproefje op de tijdlijn. */
+function firstLines(body: string, limit = 140): string {
+  const flat = body.replace(/\s+/g, " ").trim();
+  if (!flat) return "";
+  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
+}
+
+/**
+ * Kort overzicht voor de kop van de fiche.
+ *
+ * Alleen echt contact: een verstuurde mail en een ontvangen antwoord tellen mee,
+ * een klaarstaand concept niet. Anders zegt de fiche "3 contacten" terwijl er
+ * nog niemand iets gehoord heeft.
+ */
+const CONTACT_KINDS = new Set<ActivityKind>([
+  "call",
+  "email",
+  "visit",
+  "note",
+  "sent",
+  "reply",
+]);
+
 export function contactCount(items: ActivityItem[]): number {
-  return items.filter((i) =>
-    i.kind === "call" || i.kind === "email" || i.kind === "visit" || i.kind === "note"
-  ).length;
+  return items.filter((i) => CONTACT_KINDS.has(i.kind)).length;
 }
