@@ -141,6 +141,7 @@ export type OsmCandidate = {
   lng: number;
   category: string;
   phone: string | null;
+  email: string | null;
   website: string | null;
   mapsUrl: string;
   placeId: string;
@@ -314,6 +315,10 @@ function normalizeElement(
 
   const phone = tags.phone || tags["contact:phone"] || tags.telephone || null;
 
+  // Zonder mailadres kan er geen mail vertrekken en kan een antwoord ook nooit
+  // op afzender teruggevonden worden. OpenStreetMap heeft het vaak gewoon staan.
+  const email = cleanEmail(tags.email || tags["contact:email"]);
+
   return {
     name,
     address: address || null,
@@ -323,6 +328,7 @@ function normalizeElement(
     lng,
     category: categoryForTags(tags, fallbackCategory),
     phone,
+    email,
     website,
     mapsUrl: `https://www.openstreetmap.org/${el.type || "node"}/${el.id}`,
     placeId: `osm:${el.type || "node"}/${el.id}`,
@@ -344,6 +350,34 @@ function normalizeElement(
  * `takeaway=only` telt mee, `takeaway=no` niet; dat laatste is een uitdrukkelijk
  * "nee" van de kaartenmaker en geen ontbrekende gegevens.
  */
+/**
+ * Maakt een mailadres uit OpenStreetMap bruikbaar, of gooit het weg.
+ *
+ * De gegevens komen van vrijwilligers, dus er staat van alles in: een `mailto:`
+ * ervoor, twee adressen achter een puntkomma, een spatie in het midden, of
+ * gewoon "geen". Streng zijn is hier het vriendelijkst — een verkeerd adres
+ * levert een bounce op in het postvak van een medewerker, en bij een domein dat
+ * niet bestaat schaadt dat op den duur de reputatie van het echte adres.
+ */
+export function cleanEmail(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+
+  // Meerdere adressen: neem het eerste, dat is doorgaans het algemene.
+  const first = raw.split(/[;,]/)[0] ?? "";
+  const value = first
+    .trim()
+    .replace(/^mailto:/i, "")
+    .replace(/\s+/g, "")
+    .toLowerCase();
+
+  if (!value) return null;
+  // Bewust eenvoudig: één apenstaartje, een punt in het domein, geen rare tekens.
+  if (!/^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$/.test(value)) return null;
+  if (value.length > 254) return null;
+
+  return value;
+}
+
 export function sellsTakeaway(tags: Record<string, string>): boolean {
   const value = (tags.takeaway || "").toLowerCase();
   if (value === "yes" || value === "only") return true;

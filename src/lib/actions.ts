@@ -419,9 +419,10 @@ export async function saveSettings(formData: FormData) {
     // hierboven zijn openbaar en staan sowieso in elke autorisatie-URL.
     msClientSecret: encryptedSecret(secret("msClientSecret")),
     detectionCategories: categories ? JSON.stringify(categories) : undefined,
-    enabledZones: zones
-      ? JSON.stringify(zones.length ? zones : [...FLANDERS_ZONES])
-      : undefined,
+    // Alles uitvinken betekent "nergens zoeken", niet "overal zoeken". Het
+    // omgekeerde schrijven zou de keuze van de beheerder vervangen door haar
+    // tegendeel, en dat op een knop die geld kost per scan.
+    enabledZones: zones ? JSON.stringify(zones) : undefined,
     exclusionRadiusKm:
       radius !== null && radius !== "" ? Number(radius) : undefined,
     pitchTemplates: nextPlainValue(field("pitchTemplates")),

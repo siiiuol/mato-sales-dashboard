@@ -23,6 +23,7 @@ import { requirePageUser } from "@/lib/dal";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 type LeadFilters = {
   province?: string;
@@ -146,14 +147,15 @@ export default async function LeadsPage({
     .map((r) => r.city!)
     .sort((a, b) => a.localeCompare(b));
 
+  // Een lege lijst is een keuze — geen zones actief — en geen reden om er stil
+  // alle vijf van te maken. Alleen onleesbare instellingen vallen terug.
   let enabledZones: string[] = [...FLANDERS_ZONES];
   try {
-    const parsed = JSON.parse(settings.enabledZones || "[]");
-    if (Array.isArray(parsed) && parsed.length) {
-      enabledZones = parsed.filter((z: string) =>
-        (FLANDERS_ZONES as readonly string[]).includes(z)
+    const parsed: unknown = JSON.parse(settings.enabledZones || "null");
+    if (Array.isArray(parsed)) {
+      enabledZones = parsed.filter((z: unknown): z is string =>
+        typeof z === "string" && (FLANDERS_ZONES as readonly string[]).includes(z)
       );
-      if (!enabledZones.length) enabledZones = [...FLANDERS_ZONES];
     }
   } catch {
     enabledZones = [...FLANDERS_ZONES];

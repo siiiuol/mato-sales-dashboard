@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   boxAround,
+  cleanEmail,
   countNearbyVending,
   queryPlan,
   sellsTakeaway,
@@ -121,4 +122,37 @@ test("takeaway is read from the tag, and an explicit no is respected", () => {
   assert.equal(sellsTakeaway({ amenity: "fast_food", takeaway: "no" }), false);
   assert.equal(sellsTakeaway({ amenity: "fast_food" }), true);
   assert.equal(sellsTakeaway({ shop: "bakery" }), false);
+});
+
+test("a plain email address survives untouched", () => {
+  assert.equal(cleanEmail("info@bakkerijmartine.be"), "info@bakkerijmartine.be");
+});
+
+test("mailto:, spaces and capitals are cleaned off", () => {
+  // Precies wat vrijwilligers in OpenStreetMap intikken.
+  assert.equal(cleanEmail("mailto:Info@Zaak.BE"), "info@zaak.be");
+  assert.equal(cleanEmail("  info @ zaak.be "), "info@zaak.be");
+  assert.equal(cleanEmail("MAILTO:INFO@ZAAK.BE"), "info@zaak.be");
+});
+
+test("two addresses in one tag: neem de eerste", () => {
+  assert.equal(cleanEmail("info@zaak.be;jan@zaak.be"), "info@zaak.be");
+  assert.equal(cleanEmail("info@zaak.be, jan@zaak.be"), "info@zaak.be");
+});
+
+test("nonsense is thrown away rather than mailed", () => {
+  // Een verkeerd adres levert een bounce op in het postvak van een medewerker,
+  // en bij een onbestaand domein schaadt dat de reputatie van het echte adres.
+  for (const rommel of ["geen", "n/a", "-", "info(at)zaak.be", "@zaak.be", "info@", "info@zaak", "", null, undefined]) {
+    assert.equal(cleanEmail(rommel), null, `${rommel} hoort geweigerd te worden`);
+  }
+});
+
+test("an absurdly long address is refused", () => {
+  assert.equal(cleanEmail(`${"a".repeat(250)}@zaak.be`), null);
+});
+
+test("cleaning is idempotent", () => {
+  const once = cleanEmail("mailto:Info@Zaak.be");
+  assert.equal(cleanEmail(once), once);
 });

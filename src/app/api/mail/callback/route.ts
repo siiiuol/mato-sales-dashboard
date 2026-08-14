@@ -55,6 +55,16 @@ export async function GET(request: Request) {
     });
   }
 
+  // En het moet nog steeds dezelfde persoon zijn. Op een gedeelde laptop kan er
+  // tussen "koppelen" en de terugweg iemand anders aangemeld zijn; dan zou het
+  // postvak van de eerste onder het account van de tweede belanden.
+  if (attempt.userId !== user.id) {
+    return back(request, {
+      mailbox:
+        "Er is intussen met een ander account aangemeld. Begin het koppelen opnieuw.",
+    });
+  }
+
   const origin = new URL(request.url).origin;
 
   try {

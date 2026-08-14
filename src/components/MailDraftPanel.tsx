@@ -103,30 +103,40 @@ export function MailDraftPanel({
         <ul className="space-y-2 text-sm border-t border-[var(--border)] pt-3">
           {drafts.map((draft) => (
             <li key={draft.id} className="flex justify-between gap-2 items-start">
-              <button
-                type="button"
-                className="text-left hover:text-[var(--accent)]"
-                onClick={() => setEditing(draft)}
-              >
-                <span className="block">{draft.subject}</span>
-                <span className="text-xs text-[var(--text-dim)]">
-                  {draft.createdBy?.name ?? "onbekend"} ·{" "}
-                  {new Date(draft.createdAt).toLocaleDateString("nl-BE")} ·{" "}
-                  {draft.status === "SENT"
-                    ? "verstuurd"
-                    : draft.status === "APPROVED"
-                      ? "nagelezen"
-                      : "concept"}
+              {/* Een verstuurde mail is geen klad meer: hem opnieuw openen in de
+                  verstuur-editor is precies hoe een prospect dezelfde mail twee
+                  keer krijgt. */}
+              {draft.status === "SENT" ? (
+                <span className="text-left">
+                  <span className="block">{draft.subject}</span>
+                  <span className="text-xs text-[var(--text-dim)]">
+                    {draft.createdBy?.name ?? "onbekend"} ·{" "}
+                    {new Date(draft.createdAt).toLocaleDateString("nl-BE")} ·
+                    verstuurd
+                  </span>
                 </span>
-              </button>
-              {draft.status !== "SENT" && (
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost shrink-0"
-                  onClick={() => void deleteMailDraft(draft.id)}
-                >
-                  Weg
-                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="text-left hover:text-[var(--accent)]"
+                    onClick={() => setEditing(draft)}
+                  >
+                    <span className="block">{draft.subject}</span>
+                    <span className="text-xs text-[var(--text-dim)]">
+                      {draft.createdBy?.name ?? "onbekend"} ·{" "}
+                      {new Date(draft.createdAt).toLocaleDateString("nl-BE")} ·{" "}
+                      {draft.status === "APPROVED" ? "nagelezen" : "concept"}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost shrink-0"
+                    onClick={() => void deleteMailDraft(draft.id)}
+                  >
+                    Weg
+                  </button>
+                </>
               )}
             </li>
           ))}
@@ -155,22 +165,30 @@ function DraftEditor({
   onClose: () => void;
 }) {
   const [sendState, sendAction, sending] = useActionState(sendMailDraft, EMPTY_SEND);
+  const [saveState, saveAction, saving] = useActionState(saveMailDraft, EMPTY_SEND);
   const [subject, setSubject] = useState(draft.subject);
   const [body, setBody] = useState(draft.body);
   const [confirming, setConfirming] = useState(false);
 
   if (sendState.sent) {
     return (
-      <p className="text-sm" style={{ color: "var(--ok)" }}>
-        Verstuurd naar {sendState.to}. Het antwoord verschijnt op de tijdlijn
-        zodra je op &ldquo;Antwoorden ophalen&rdquo; klikt.
-      </p>
+      <div className="space-y-2">
+        <p className="text-sm" style={{ color: "var(--ok)" }}>
+          Verstuurd naar {sendState.to}. Het antwoord verschijnt op de tijdlijn
+          zodra je op &ldquo;Antwoorden ophalen&rdquo; klikt.
+        </p>
+        {sendState.warning && (
+          <p className="text-sm" style={{ color: "var(--caution)" }}>
+            {sendState.warning}
+          </p>
+        )}
+      </div>
     );
   }
 
   return (
     <div className="space-y-2">
-      <form action={saveMailDraft} className="space-y-2">
+      <form action={saveAction} className="space-y-2">
         <input type="hidden" name="draftId" value={draft.id} />
         <label className="block">
           <span className="label">Onderwerp</span>
@@ -194,13 +212,22 @@ function DraftEditor({
             required
           />
         </label>
-        <div className="flex flex-wrap gap-2">
-          <button type="submit" className="btn">
-            Bewaren
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="submit" className="btn" disabled={saving}>
+            {saving ? "Bezig…" : "Bewaren"}
           </button>
           <button type="button" className="btn btn-ghost" onClick={onClose}>
             Sluiten
           </button>
+          {saveState.error ? (
+            <span className="text-xs" style={{ color: "var(--alert)" }}>
+              {saveState.error}
+            </span>
+          ) : saveState.saved ? (
+            <span className="text-xs" style={{ color: "var(--ok)" }}>
+              bewaard
+            </span>
+          ) : null}
         </div>
       </form>
 

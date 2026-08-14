@@ -20,7 +20,16 @@ export const OAUTH_COOKIE = "mato_ms_oauth";
 /** Vijf minuten: ruim voor een aanmeldscherm, kort genoeg om te vervallen. */
 const MAX_AGE = 300;
 
-export type OauthAttempt = { state: string; verifier: string };
+/**
+ * `userId` hoort er nadrukkelijk bij.
+ *
+ * De cookie hangt aan de browser, niet aan het account. Op een gedeelde laptop
+ * kan de ene medewerker de koppeling starten, de andere zich intussen aanmelden,
+ * en dan zou het postvak van de eerste onder het account van de tweede belanden
+ * — met zijn mail en zijn antwoorden. Door wie hem startte mee te versleutelen
+ * kan de terugweg dat zien en weigeren.
+ */
+export type OauthAttempt = { state: string; verifier: string; userId: string };
 
 export function serialiseAttempt(attempt: OauthAttempt): string {
   return encryptSecret(JSON.stringify(attempt));
@@ -49,11 +58,15 @@ export async function readAttempt(): Promise<OauthAttempt | null> {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(decryptSecret(raw)) as Partial<OauthAttempt>;
-    if (typeof parsed.state !== "string" || typeof parsed.verifier !== "string") {
+    if (
+      typeof parsed.state !== "string" ||
+      typeof parsed.verifier !== "string" ||
+      typeof parsed.userId !== "string"
+    ) {
       return null;
     }
-    if (!parsed.state || !parsed.verifier) return null;
-    return { state: parsed.state, verifier: parsed.verifier };
+    if (!parsed.state || !parsed.verifier || !parsed.userId) return null;
+    return { state: parsed.state, verifier: parsed.verifier, userId: parsed.userId };
   } catch {
     return null;
   }

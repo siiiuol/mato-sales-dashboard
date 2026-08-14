@@ -360,6 +360,9 @@ async function placesCandidates(
         lng,
         category: placesCategory(place.primaryType),
         phone: place.nationalPhoneNumber ?? place.internationalPhoneNumber ?? null,
+        // Google geeft geen mailadres terug, in geen enkel veld. Wat we hebben
+        // komt van OpenStreetMap of van de zaak zelf.
+        email: null,
         website: place.websiteUri ?? null,
         mapsUrl: `https://www.google.com/maps/place/?q=place_id:${id}`,
         placeId,
@@ -527,6 +530,7 @@ export async function runDetection(
           lng: c.lng ?? undefined,
           category: c.category,
           phone: c.phone ?? undefined,
+          email: c.email ?? undefined,
           website: c.website ?? undefined,
           mapsUrl: c.mapsUrl ?? undefined,
           placeId: c.placeId,

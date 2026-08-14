@@ -167,29 +167,55 @@ export function stripHtml(html: string): string {
 /**
  * Haalt binnengekomen mail op sinds een tijdstip.
  *
- * Alleen de inbox, en alleen wat nieuw is — een volledige mailbox doorlopen zou
- * traag zijn en niets extra opleveren.
+ * Oudste eerst, en met paginering. Dat is niet willekeurig: de aanroeper zet
+ * zijn peilmerk op het nieuwste bericht dat hij bewaarde. Haalden we nieuwste
+ * eerst op en paste de rest niet meer in de pagina, dan schuift dat peilmerk
+ * over alle oudere berichten heen en zijn die voorgoed onzichtbaar — terwijl
+ * het scherm "niets nieuws" meldt.
+ *
+ * `truncated` zegt of er nog meer klaarstond dan we in één ronde ophaalden, zodat
+ * de medewerker te horen krijgt dat hij nog een keer moet drukken.
  */
 export async function fetchInbox({
   accessToken,
   since,
-  limit = 50,
+  maxMessages = 200,
 }: {
   accessToken: string;
   since: Date;
-  limit?: number;
-}): Promise<IncomingMessage[]> {
+  maxMessages?: number;
+}): Promise<{ messages: IncomingMessage[]; truncated: boolean }> {
   const params = new URLSearchParams({
     $filter: `receivedDateTime ge ${since.toISOString()}`,
-    $orderby: "receivedDateTime desc",
-    $top: String(Math.min(limit, 100)),
+    $orderby: "receivedDateTime asc",
+    $top: "50",
     $select: "id,conversationId,subject,bodyPreview,body,from,toRecipients,receivedDateTime",
   });
 
-  const result = await graph<{ value: GraphMessage[] }>(
-    accessToken,
-    `/me/mailFolders/inbox/messages?${params.toString()}`
-  );
+  let url: string | null = `/me/mailFolders/inbox/messages?${params.toString()}`;
+  const messages: IncomingMessage[] = [];
+  let truncated = false;
 
-  return (result.value ?? []).map(toIncoming);
+  while (url) {
+    const page: { value?: GraphMessage[]; "@odata.nextLink"?: string } = await graph(
+      accessToken,
+      url
+    );
+    messages.push(...(page.value ?? []).map(toIncoming));
+
+    const next = page["@odata.nextLink"];
+    if (!next) break;
+
+    if (messages.length >= maxMessages) {
+      // Een postvak met duizenden berichten mag één ronde niet laten hangen.
+      // We stoppen, maar zeggen het — stil afkappen is precies de fout die dit
+      // hele ontwerp probeert te vermijden.
+      truncated = true;
+      break;
+    }
+    // Graph geeft een volledige URL terug; die kort de helper zelf niet in.
+    url = next.replace("https://graph.microsoft.com/v1.0", "");
+  }
+
+  return { messages, truncated };
 }

@@ -54,7 +54,7 @@ export async function GET(request: Request) {
 
   response.cookies.set(
     OAUTH_COOKIE,
-    serialiseAttempt({ state, verifier }),
+    serialiseAttempt({ state, verifier, userId: user.id }),
     cookieOptions()
   );
 

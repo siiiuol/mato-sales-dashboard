@@ -32,6 +32,17 @@ export function ReplySyncButton() {
           {state.added
             ? `${state.added} nieuw${state.added === 1 ? "" : "e"}`
             : "niets nieuws"}
+          {/* Stil afkappen zou "niets nieuws" laten liegen over een antwoord
+              dat wel degelijk binnenkwam. */}
+          {state.truncated && (
+            <span style={{ color: "var(--caution)" }}> · nog niet alles, druk nogmaals</span>
+          )}
+          {Boolean(state.failed) && (
+            <span style={{ color: "var(--alert)" }}>
+              {" "}
+              · {state.failed} niet kunnen opslaan
+            </span>
+          )}
         </span>
       ) : null}
     </form>
