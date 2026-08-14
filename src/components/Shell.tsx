@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { NAV, NAV_ADMIN } from "@/lib/constants";
+import {
+  isSectionHome,
+  PLATFORM_ADMIN_NAV,
+  SECTIONS,
+  sectionFor,
+} from "@/lib/constants";
 import { logout } from "@/lib/auth-actions";
 
 type Role = "admin" | "sales" | "reviewer";
@@ -32,12 +37,19 @@ export function Shell({
     return () => window.clearInterval(id);
   }, []);
 
+  // De voorpagina van een sectie moet exact matchen, de rest op het begin van
+  // het pad. Anders blijft "Campagnes" branden op /reclame/materiaal.
   const isActive = (href: string) =>
-    href === "/" ? pathname === "/" : pathname.startsWith(href);
+    isSectionHome(href) ? pathname === href : pathname.startsWith(href);
+
+  const section = sectionFor(pathname);
 
   const items = useMemo(
-    () => (role === "admin" ? [...NAV, ...NAV_ADMIN] : [...NAV]),
-    [role]
+    () =>
+      role === "admin"
+        ? [...section.nav, ...PLATFORM_ADMIN_NAV]
+        : [...section.nav],
+    [role, section]
   );
 
   if (pathname === "/login") {
@@ -52,18 +64,34 @@ export function Shell({
     <div className="min-h-full flex flex-col">
       <header className="app-header">
         <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-5 shrink-0">
+          <div className="flex items-center gap-4 shrink-0">
+            {/* Blijft naar de voorpagina wijzen: de uitweg uit een sectie. */}
             <Link href="/" className="shell-brand">
               MATO
             </Link>
+            {/* Bewust buiten het `hidden sm:flex`-blok hieronder: stond de
+                schakelaar daarin, dan kon je op een telefoon niet van sectie
+                wisselen. De klok mag wél wegvallen. */}
+            <div className="flex items-center gap-1">
+              {SECTIONS.map((s) => (
+                <Link
+                  key={s.key}
+                  href={s.home}
+                  className="nav-link"
+                  data-active={s.key === section.key}
+                >
+                  {s.label}
+                </Link>
+              ))}
+            </div>
             <div className="hidden sm:flex flex-col gap-0.5">
-              <span className="label">Verkoop</span>
               <span className="mono text-[0.65rem] text-[var(--text-mute)] tracking-[0.14em]">
                 {clock || "--:--:--"} · Vlaanderen
               </span>
             </div>
           </div>
-          {/* Two sales links plus logout fit on a phone without a menu. */}
+          {/* Op een smal scherm valt de balk netjes op een tweede regel; het
+              blok is flex-wrap. Geen uitklapmenu nodig. */}
           <nav className="flex flex-wrap items-center justify-end gap-1">
             {items.map((item) => (
               <Link

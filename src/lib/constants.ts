@@ -1,17 +1,72 @@
-export const NAV = [
-  { href: "/", label: "Mijn leads" },
-  { href: "/leads", label: "Leads" },
+/**
+ * De secties van MATO OS.
+ *
+ * Verkoop is de terugval en heeft daarom geen voorvoegsel: alles wat geen
+ * andere sectie opeist hoort daar. Dat is niet uit gemakzucht — het is de
+ * eerlijke vorm. Verkoop is de app; de secties die erbij komen zijn de gasten,
+ * en die dragen hun eigen voorvoegsel.
+ *
+ * Een derde sectie toevoegen is één object hier, één map onder `src/app`, en de
+ * gebruikelijke bewaking op elke pagina. Verder niets.
+ */
+export const SECTIONS = [
+  {
+    key: "verkoop",
+    label: "Verkoop",
+    home: "/",
+    prefix: null,
+    nav: [
+      { href: "/", label: "Mijn leads" },
+      { href: "/leads", label: "Leads" },
+    ],
+  },
+  {
+    key: "reclame",
+    label: "Reclame",
+    home: "/reclame",
+    prefix: "/reclame",
+    nav: [
+      { href: "/reclame", label: "Campagnes" },
+      { href: "/reclame/materiaal", label: "Materiaal" },
+      { href: "/reclame/merk", label: "Merk" },
+    ],
+  },
 ] as const;
 
 /**
+ * Team en Instellingen horen bij geen enkele sectie — ze gelden voor het hele
+ * platform en staan in elke sectie achteraan.
+ *
  * Alleen zichtbaar voor de beheerder. De echte afscherming staat in
- * `requirePageUser` op de pagina's zelf — dit bepaalt enkel wat er in de balk
+ * `requirePageUser` op de pagina's zelf; dit bepaalt enkel wat er in de balk
  * verschijnt.
  */
-export const NAV_ADMIN = [
+export const PLATFORM_ADMIN_NAV = [
   { href: "/team", label: "Team" },
   { href: "/settings", label: "Instellingen" },
 ] as const;
+
+const SECTION_HOMES = new Set<string>(SECTIONS.map((s) => s.home));
+
+/** In welke sectie een pad valt. Afleiden is goedkoper dan onthouden. */
+export function sectionFor(pathname: string) {
+  return (
+    SECTIONS.find(
+      (s) => s.prefix && (pathname === s.prefix || pathname.startsWith(`${s.prefix}/`))
+    ) ?? SECTIONS[0]
+  );
+}
+
+/**
+ * Of een link de voorpagina van een sectie is.
+ *
+ * Die moet exact overeenkomen om op te lichten; de rest mag op het begin van
+ * het pad matchen. Anders blijft "Campagnes" branden terwijl je op
+ * /reclame/materiaal staat.
+ */
+export function isSectionHome(href: string) {
+  return SECTION_HOMES.has(href);
+}
 
 /** Rollen zoals ze op het scherm heten. In de database blijven ze Engels. */
 export const ROLE_LABELS: Record<string, string> = {

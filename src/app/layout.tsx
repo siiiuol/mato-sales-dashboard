@@ -29,10 +29,15 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+// De hoofdlayout: elke sectie erft dit. Sinds er meer dan verkoop in zit, mag
+// de titel niet meer één sectie noemen.
 export const metadata = {
-  title: "MATO — Verkoop",
-  description: "Leads zoeken, bellen en opvolgen in heel Vlaanderen.",
+  title: "MATO OS",
+  description: "Verkoop en reclame van MATO, op één plek.",
 };
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 export default async function RootLayout({
   children,
