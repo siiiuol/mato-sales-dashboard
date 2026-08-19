@@ -4,7 +4,12 @@ import { dirname, join } from "node:path";
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const source = await readFile(join(directory, "schema.prisma"), "utf8");
-const postgres = source.replace('provider = "sqlite"', 'provider = "postgresql"');
+const postgres = source
+  .replace('provider = "sqlite"', 'provider = "postgresql"')
+  .replace(
+    'url      = env("DATABASE_URL")',
+    'url       = env("DATABASE_URL")\n  directUrl = env("DIRECT_URL")'
+  );
 const target = join(directory, "schema.postgresql.prisma");
 await writeFile(
   target,
