@@ -11,6 +11,7 @@ import {
   takeLead,
   unskipLead,
 } from "@/lib/actions";
+import { createTask } from "@/lib/task-actions";
 import { TriageButtons } from "@/components/TriageButtons";
 import { OwnerButton } from "@/components/OwnerButton";
 import { ContractForm } from "@/components/ContractForm";
@@ -67,7 +68,7 @@ export default async function LeadDetailPage({
     },
   });
   if (!lead) notFound();
-  const [audits, products, documents, drafts, mail, mailbox] = await Promise.all([
+  const [audits, products, documents, drafts, mail, mailbox, tasks, snippets] = await Promise.all([
     prisma.auditEvent.findMany({
       where: { entityType: "lead", entityId: lead.id },
       orderBy: { createdAt: "desc" },
@@ -124,6 +125,24 @@ export default async function LeadDetailPage({
       where: { userId: user.id },
       select: { emailAddress: true },
     }),
+    prisma.task.findMany({
+      where: { leadId: lead.id, status: { in: ["DONE", "CANCELLED"] } },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        completedAt: true,
+        updatedAt: true,
+        assignedTo: { select: { name: true } },
+      },
+    }),
+    prisma.mailSnippet.findMany({
+      where: { active: true },
+      orderBy: [{ situation: "asc" }, { label: "asc" }],
+      select: { id: true, situation: true, label: true },
+    }),
   ]);
 
   const timeline = buildActivity({
@@ -132,6 +151,7 @@ export default async function LeadDetailPage({
     documents,
     audits,
     mail,
+    tasks,
   });
   const counts = activityCounts(timeline);
   const contacts = contactCount(timeline);
@@ -264,6 +284,18 @@ export default async function LeadDetailPage({
           <ContactLogPanel leadId={lead.id} />
 
           <section className="panel p-4 space-y-3">
+            <h2 className="label text-[var(--accent)]">Taak toevoegen</h2>
+            <form action={createTask} className="space-y-2">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <input name="title" className="input" placeholder="Wat moet er gebeuren" required maxLength={200} />
+              <input name="dueAt" type="datetime-local" className="input" />
+              <button type="submit" className="btn w-full">
+                Toevoegen aan Mijn taken
+              </button>
+            </form>
+          </section>
+
+          <section className="panel p-4 space-y-3">
             <h2 className="label text-[var(--accent)]">Verkocht</h2>
 
             {lead.deals.length > 0 ? (
@@ -328,6 +360,7 @@ export default async function LeadDetailPage({
               leadEmail={lead.email}
               mailboxAddress={mailbox?.emailAddress ?? null}
               drafts={drafts}
+              snippets={snippets}
             />
           </section>
 

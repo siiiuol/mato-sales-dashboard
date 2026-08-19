@@ -18,6 +18,7 @@ export const SECTIONS = [
     nav: [
       { href: "/", label: "Mijn leads" },
       { href: "/leads", label: "Leads" },
+      { href: "/taken", label: "Mijn taken" },
     ],
   },
   {
@@ -29,6 +30,16 @@ export const SECTIONS = [
       { href: "/reclame", label: "Campagnes" },
       { href: "/reclame/materiaal", label: "Materiaal" },
       { href: "/reclame/merk", label: "Merk" },
+    ],
+  },
+  {
+    key: "klanten",
+    label: "Klanten",
+    home: "/klanten",
+    prefix: "/klanten",
+    nav: [
+      { href: "/klanten", label: "Klanten" },
+      { href: "/taken", label: "Mijn taken" },
     ],
   },
 ] as const;
@@ -424,15 +435,19 @@ export const TEMPLATE_STATUSES = [
 ] as const;
 
 export const TEMPLATE_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "Draft",
-  UNDER_REVIEW: "Under review",
-  MATO_APPROVED: "MATO approved",
-  ACCOUNTANT_APPROVED: "Accountant approved",
-  LEGAL_APPROVED: "Legal approved",
-  SUPERSEDED: "Superseded",
-  EXPIRED: "Expired",
-  BLOCKED: "Blocked",
+  DRAFT: "Concept",
+  UNDER_REVIEW: "In nazicht",
+  MATO_APPROVED: "Actief",
+  ACCOUNTANT_APPROVED: "Goedgekeurd door boekhouder",
+  LEGAL_APPROVED: "Juridisch goedgekeurd",
+  SUPERSEDED: "Vervangen",
+  EXPIRED: "Vervallen",
+  BLOCKED: "Geblokkeerd",
 };
+
+export function templateStatusLabel(status: string) {
+  return TEMPLATE_STATUS_LABELS[status] ?? status;
+}
 
 export const DOCUMENT_CATEGORIES = [
   "SALES",
@@ -443,6 +458,20 @@ export const DOCUMENT_CATEGORIES = [
   "MARKETING",
   "INTERNAL",
 ] as const;
+
+export const DOCUMENT_CATEGORY_LABELS: Record<string, string> = {
+  SALES: "Verkoop",
+  MACHINE: "Automaat",
+  PACKAGING: "Verpakking",
+  SUPPLIER: "Leverancier",
+  PARTNERSHIP: "Samenwerking",
+  MARKETING: "Reclame",
+  INTERNAL: "Intern",
+};
+
+export function documentCategoryLabel(category: string) {
+  return DOCUMENT_CATEGORY_LABELS[category] ?? category;
+}
 
 /** Clause categories (spec §39.1). */
 export const CLAUSE_CATEGORIES = [
@@ -510,10 +539,42 @@ export const CONTACT_ROLES = [
   "GATEKEEPER",
 ] as const;
 
+export const CONTACT_ROLE_LABELS: Record<string, string> = {
+  OWNER: "Eigenaar",
+  DIRECTOR: "Directeur",
+  PURCHASING_MANAGER: "Inkoop",
+  OPERATIONS_MANAGER: "Operations",
+  MARKETING_MANAGER: "Marketing",
+  FACILITY_MANAGER: "Facility",
+  STORE_MANAGER: "Winkelverantwoordelijke",
+  PRODUCTION_MANAGER: "Productie",
+  FINANCE: "Financiën",
+  TECHNICAL: "Technisch",
+  GENERAL: "Algemeen",
+  GATEKEEPER: "Onthaal / poortwachter",
+};
+
+export function contactRoleLabel(role: string) {
+  return CONTACT_ROLE_LABELS[role] ?? role;
+}
+
 export const CONTACT_INFLUENCE = ["UNKNOWN", "LOW", "MEDIUM", "HIGH"] as const;
+
+export const CONTACT_INFLUENCE_LABELS: Record<string, string> = {
+  UNKNOWN: "Onbekend",
+  LOW: "Laag",
+  MEDIUM: "Gemiddeld",
+  HIGH: "Hoog",
+};
 
 /** GDPR-relevant consent state (spec §8.1, §58.4). */
 export const CONTACT_CONSENT = ["UNKNOWN", "GIVEN", "WITHDRAWN"] as const;
+
+export const CONTACT_CONSENT_LABELS: Record<string, string> = {
+  UNKNOWN: "Onbekend",
+  GIVEN: "Gegeven",
+  WITHDRAWN: "Ingetrokken",
+};
 
 export function contactName(c: { firstName: string; lastName?: string | null }) {
   return [c.firstName, c.lastName].filter(Boolean).join(" ");
@@ -545,15 +606,46 @@ export const TASK_ACTIVE_STATUSES = [
 ] as const;
 
 export const TASK_STATUS_LABELS: Record<string, string> = {
-  OPEN: "Not started",
-  IN_PROGRESS: "In progress",
-  WAITING_CUSTOMER: "Waiting for customer",
-  WAITING_SUPPLIER: "Waiting for supplier",
-  WAITING_APPROVAL: "Waiting for approval",
-  BLOCKED: "Blocked",
-  DONE: "Completed",
-  CANCELLED: "Cancelled",
+  OPEN: "Open",
+  IN_PROGRESS: "Bezig",
+  WAITING_CUSTOMER: "Wacht op klant",
+  WAITING_SUPPLIER: "Wacht op leverancier",
+  WAITING_APPROVAL: "Wacht op goedkeuring",
+  BLOCKED: "Geblokkeerd",
+  DONE: "Afgerond",
+  CANCELLED: "Geannuleerd",
 };
+
+export function taskStatusLabel(status: string) {
+  return TASK_STATUS_LABELS[status] ?? status;
+}
+
+/** Automaatplaatsing bij een klant — bewust licht, geen onderhoudsstatussen. */
+export const MACHINE_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "Actief",
+  REMOVED: "Weggehaald",
+};
+
+export function machineStatusLabel(status: string) {
+  return MACHINE_STATUS_LABELS[status] ?? status;
+}
+
+/**
+ * Situaties waarvoor een herbruikbare mailtekst zinvol is.
+ *
+ * Bewust dezelfde taal als de cadans-stappen in `cadences.ts` — zodat een
+ * "dag 5, geen reactie"-taak straks naar de bijpassende tekst kan wijzen.
+ */
+export const MAIL_SITUATIONS = [
+  { value: "FIRST_OUTREACH", label: "Eerste contact" },
+  { value: "NO_REPLY_FOLLOWUP", label: "Geen reactie — opvolgen" },
+  { value: "POST_SALE_CHECKIN", label: "Klant — check-in" },
+  { value: "POST_SALE_ONBOARDING", label: "Klant — opstart" },
+] as const;
+
+export function mailSituationLabel(situation: string) {
+  return MAIL_SITUATIONS.find((s) => s.value === situation)?.label ?? situation;
+}
 
 export const SUPPLIER_STATUSES = [
   "NEW",

@@ -5,6 +5,11 @@ import {
   contactTypeLabel,
 } from "./constants";
 
+const TASK_TIMELINE_LABELS: Record<string, string> = {
+  DONE: "Taak afgerond",
+  CANCELLED: "Taak geannuleerd",
+};
+
 /**
  * Alles wat er met een lead gebeurd is, op één tijdlijn.
  *
@@ -26,6 +31,8 @@ export type ActivityKind =
   /** Een antwoord van de prospect. */
   | "reply"
   | "document"
+  /** Een taak die afgerond of geannuleerd is — niet de openstaande zelf. */
+  | "task"
   | "lead";
 
 export type ActivityItem = {
@@ -82,6 +89,18 @@ export type ActivitySources = {
     toAddress: string;
     user?: Named;
   }>;
+  /**
+   * Alleen afgeronde of geannuleerde taken — een openstaande taak hoort op de
+   * takenlijst, niet als voltooid feit op de geschiedenis.
+   */
+  tasks?: Array<{
+    id: string;
+    title: string;
+    status: string;
+    completedAt: Date | null;
+    updatedAt: Date;
+    assignedTo?: Named;
+  }>;
 };
 
 /**
@@ -98,6 +117,8 @@ const COVERED_BY_RICHER_SOURCE = new Set([
   "document.generated",
   "mail.drafted",
   "mail.approved",
+  "task.completed",
+  "task.cancelled",
 ]);
 
 /** Logboekhandelingen in gewone taal. */
@@ -113,6 +134,11 @@ const AUDIT_LABELS: Record<string, string> = {
   "lead.compliance_changed": "Toestemming aangepast",
   "document.signed": "Document getekend",
   "mail.discarded": "Mailconcept verwijderd",
+  "contact.created": "Contactpersoon toegevoegd",
+  "contact.updated": "Contactpersoon aangepast",
+  "contact.deleted": "Contactpersoon verwijderd",
+  "machine.placed": "Automaat geregistreerd",
+  "machine.removed": "Automaat weggehaald",
 };
 
 const OUTCOME_LABELS = new Map<string, string>([
@@ -192,6 +218,18 @@ export function buildActivity(sources: ActivitySources): ActivityItem[] {
         .filter(Boolean)
         .join(" · "),
       actor: message.user?.name ?? null,
+    });
+  }
+
+  for (const task of sources.tasks ?? []) {
+    if (task.status !== "DONE" && task.status !== "CANCELLED") continue;
+    items.push({
+      id: `task-${task.id}`,
+      at: task.completedAt ?? task.updatedAt,
+      kind: "task",
+      title: TASK_TIMELINE_LABELS[task.status] ?? task.status,
+      detail: task.title,
+      actor: task.assignedTo?.name ?? null,
     });
   }
 
@@ -276,6 +314,7 @@ export function activityCounts(items: ActivityItem[]): Record<ActivityKind, numb
     sent: 0,
     reply: 0,
     document: 0,
+    task: 0,
     lead: 0,
   };
   for (const item of items) counts[item.kind]++;

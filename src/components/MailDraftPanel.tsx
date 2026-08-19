@@ -9,6 +9,7 @@ import {
   type MailDraftState,
   type MailSendState,
 } from "@/lib/mail-actions";
+import { MAIL_SITUATIONS } from "@/lib/constants";
 
 const EMPTY: MailDraftState = {};
 const EMPTY_SEND: MailSendState = {};
@@ -29,12 +30,15 @@ type SavedDraft = {
  * komt van een model en gaat naar een klant; dat hoort niet te gebeuren omdat
  * iemand één keer te snel klikt.
  */
+type MailSnippet = { id: string; situation: string; label: string };
+
 export function MailDraftPanel({
   leadId,
   hasWebsite,
   leadEmail,
   mailboxAddress,
   drafts,
+  snippets,
 }: {
   leadId: string;
   hasWebsite: boolean;
@@ -42,6 +46,8 @@ export function MailDraftPanel({
   /** Het gekoppelde postvak van deze medewerker, of null. */
   mailboxAddress: string | null;
   drafts: SavedDraft[];
+  /** Actieve mailteksten om als vertrekpunt te kiezen — leeg mag gewoon. */
+  snippets: MailSnippet[];
 }) {
   const [state, action, pending] = useActionState(generateMailDraft, EMPTY);
   const [editing, setEditing] = useState<SavedDraft | null>(null);
@@ -69,6 +75,24 @@ export function MailDraftPanel({
               <input type="checkbox" name="useWebsite" defaultChecked />
               <span>Website van de zaak meelezen</span>
             </label>
+          )}
+          {snippets.length > 0 && (
+            <select name="snippetId" className="select" defaultValue="">
+              <option value="">Geen vertrekpunt — AI schrijft vrij</option>
+              {MAIL_SITUATIONS.map((situation) => {
+                const items = snippets.filter((s) => s.situation === situation.value);
+                if (!items.length) return null;
+                return (
+                  <optgroup key={situation.value} label={situation.label}>
+                    {items.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                );
+              })}
+            </select>
           )}
           <button type="submit" className="btn btn-primary w-full" disabled={pending}>
             {pending ? "Bezig met opstellen…" : "Mail opstellen"}

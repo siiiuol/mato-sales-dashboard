@@ -102,3 +102,55 @@ test("the sender's name is in the brief so the model signs correctly", () => {
   });
   assert.match(prompt, /Jonas Vermeulen/);
 });
+
+test("a chosen snippet appears in the prompt as an instruction, not silently ignored", () => {
+  const prompt = buildMailPrompt({
+    lead: BASE,
+    senderName: "Jonas",
+    businessName: "MATO",
+    snippetBody: "Korte, directe mail met FOMO-invalshoek.",
+  });
+  assert.match(prompt, /Korte, directe mail met FOMO-invalshoek\./);
+});
+
+test("the snippet instruction forbids copying it verbatim", () => {
+  // Zonder deze strengheid gaat elke mail in dezelfde situatie op elkaar
+  // lijken — precies wat de AI-personalisatie moet voorkomen.
+  const prompt = buildMailPrompt({
+    lead: BASE,
+    senderName: "Jonas",
+    businessName: "MATO",
+    snippetBody: "Een tekst.",
+  });
+  assert.match(prompt, /vertrekpunt/i);
+  assert.match(prompt, /verzin er niets nieuws bij/i);
+});
+
+test("without a chosen snippet the prompt has no snippet block at all", () => {
+  const prompt = buildMailPrompt({ lead: BASE, senderName: "Jonas", businessName: "MATO" });
+  assert.ok(!prompt.includes("<vertrekpunt>"));
+});
+
+test("a blank snippet is treated the same as no snippet", () => {
+  const prompt = buildMailPrompt({
+    lead: BASE,
+    senderName: "Jonas",
+    businessName: "MATO",
+    snippetBody: "   ",
+  });
+  assert.ok(!prompt.includes("<vertrekpunt>"));
+});
+
+test("a website block and a snippet block can both be present, in order", () => {
+  const prompt = buildMailPrompt({
+    lead: BASE,
+    senderName: "Jonas",
+    businessName: "MATO",
+    websiteText: "Wij verkopen brood.",
+    snippetBody: "Vertrekpunt-tekst.",
+  });
+  const websiteIndex = prompt.indexOf("<website>");
+  const snippetIndex = prompt.indexOf("<vertrekpunt>");
+  assert.ok(websiteIndex > -1 && snippetIndex > -1);
+  assert.ok(websiteIndex < snippetIndex, "website-blok hoort voor het vertrekpunt-blok te staan");
+});

@@ -28,6 +28,8 @@ export type MailContext = {
   businessName: string;
   /** Tekst van de website van de prospect, als die opgehaald kon worden. */
   websiteText?: string | null;
+  /** Gekozen mailtekst als vertrekpunt/stijl — zie `snippetBlock`. */
+  snippetBody?: string | null;
 };
 
 /**
@@ -108,8 +110,26 @@ ${trimmed}
 </website>`;
 }
 
+/**
+ * De gekozen mailtekst als vertrekpunt — een instructie, geen naslag: dit komt
+ * van een MATO-beheerder, niet van een derde. Even streng als het website-blok
+ * hierboven verwoord waarom: zonder die strengheid gaat elke mail in dezelfde
+ * situatie op elkaar lijken, en dat is precies wat de AI-personalisatie moet
+ * voorkomen.
+ */
+function snippetBlock(text: string): string {
+  return `
+Gebruik onderstaande tekst als vertrekpunt en stijl, niet als kant-en-klare mail.
+Pas hem aan op de feiten hierboven en verzin er niets nieuws bij — staat een
+bewering erin die niet steunt op die feiten, laat ze dan weg.
+
+<vertrekpunt>
+${text.trim()}
+</vertrekpunt>`;
+}
+
 export function buildMailPrompt(context: MailContext): string {
-  const { lead, senderName, businessName, websiteText } = context;
+  const { lead, senderName, businessName, websiteText, snippetBody } = context;
   return [
     `Schrijf een eerste mail aan deze zaak namens ${businessName}.`,
     "",
@@ -120,6 +140,7 @@ export function buildMailPrompt(context: MailContext): string {
     "",
     `Onderteken met: ${senderName}`,
     websiteText?.trim() ? websiteBlock(websiteText) : "",
+    snippetBody?.trim() ? snippetBlock(snippetBody) : "",
   ]
     .filter(Boolean)
     .join("\n");

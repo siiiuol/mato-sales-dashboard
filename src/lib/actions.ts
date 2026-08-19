@@ -12,6 +12,7 @@ import { callOutcomeSchema, formObject, idSchema } from "./validation";
 import { logCallForLead } from "./call-log";
 import { encryptSecret } from "./secrets";
 import { definedOnly, nextPlainValue, nextSecretValue } from "./settings-fields";
+import { cancelCadence, enrollCustomerOnboarding } from "./cadence-actions";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
 
@@ -275,8 +276,12 @@ export async function skipLead(leadId: string) {
   });
   // Store the previous status so a skip is restorable, not just reversible.
   await audit(user.id, "lead.skipped", "lead", id, { previousStatus: lead.status });
+  await cancelCadence({ leadId: id }, "LEAD_FOLLOWUP").catch((err) =>
+    console.error("kon opvolgreeks niet annuleren", err)
+  );
   revalidatePath("/leads");
   revalidatePath("/");
+  revalidatePath("/taken");
 }
 
 /**
@@ -378,10 +383,19 @@ export async function markLeadWon(formData: FormData) {
     value: input.value,
   });
 
+  // De lead-opvolging is voorbij — dit ís de conversie waar ze op wachtte.
+  // De klant start zijn eigen, andersoortige ritme: nazorg, geen overtuiging.
+  await Promise.all([
+    cancelCadence({ leadId: lead.id }, "LEAD_FOLLOWUP"),
+    enrollCustomerOnboarding(customer.id, deal.ownerId ?? user.id),
+  ]).catch((err) => console.error("kon opvolgcadans niet bijwerken bij winst", err));
+
   revalidatePath(`/leads/${lead.id}`);
   revalidatePath("/leads");
   revalidatePath("/team");
   revalidatePath("/");
+  revalidatePath("/klanten");
+  revalidatePath("/taken");
 }
 
 export async function saveSettings(formData: FormData) {

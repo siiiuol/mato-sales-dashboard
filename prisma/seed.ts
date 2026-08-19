@@ -6,6 +6,7 @@ import {
   CONTRACT_CODE,
   CONTRACT_PREFIX,
 } from "../src/lib/contract-template";
+import { PARTNER_TEMPLATES } from "../src/lib/partner-templates";
 
 const prisma = new PrismaClient();
 
@@ -174,13 +175,39 @@ async function main() {
         category: "SALES",
         language: "nl",
         version: 1,
-        status: "ACTIVE",
+        // Enige geldige "actief"-status uit TEMPLATE_STATUSES — "ACTIVE" bestaat
+        // daar niet en zou door een statusfilter nooit gevonden worden.
+        status: "MATO_APPROVED",
         numberPrefix: CONTRACT_PREFIX,
         body: CONTRACT_BODY,
         outputFormats: "PDF",
         effectiveAt: new Date(),
       },
     });
+  }
+
+  // Partnersjablonen — als DRAFT, zodat er eerst een blik op geworpen wordt
+  // bij Instellingen -> Documentsjablonen voor het geactiveerd wordt. Zelfde
+  // "niet opnieuw aanmaken als hij al bestaat"-guard als het verkoopcontract.
+  for (const t of PARTNER_TEMPLATES) {
+    const existingPartnerTemplate = await prisma.documentTemplate.findFirst({
+      where: { code: t.code, version: 1 },
+    });
+    if (!existingPartnerTemplate) {
+      await prisma.documentTemplate.create({
+        data: {
+          code: t.code,
+          name: t.name,
+          category: t.category,
+          language: "nl",
+          version: 1,
+          status: "DRAFT",
+          numberPrefix: t.prefix,
+          body: t.body,
+          outputFormats: "PDF",
+        },
+      });
+    }
   }
 
   // No demo leads or demo deals.

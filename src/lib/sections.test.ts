@@ -43,9 +43,15 @@ test("every section has a home that resolves back to itself", () => {
   }
 });
 
-test("no section link is duplicated across sections", () => {
+test("no section link is duplicated across sections, except the deliberate shared taken-link", () => {
+  // /taken staat bewust in zowel Verkoop als Klanten: taken kunnen aan een lead
+  // óf een klant hangen, en de medewerker wil ze op één plek zien ongeacht
+  // welke sectie hij net verliet.
   const alle = SECTIONS.flatMap((s) => s.nav.map((n) => n.href));
-  assert.equal(new Set(alle).size, alle.length);
+  const gedeeld = new Set(["/taken"]);
+  const zonderGedeelde = alle.filter((href) => !gedeeld.has(href));
+  assert.equal(new Set(zonderGedeelde).size, zonderGedeelde.length);
+  assert.equal(alle.filter((href) => href === "/taken").length, 2);
 });
 
 test("the platform links belong to no section", () => {
@@ -58,11 +64,10 @@ test("the platform links belong to no section", () => {
   }
 });
 
-test("verkoop keeps its own routes untouched", () => {
-  // De bestaande sectie mag door dit alles niet van vorm veranderen.
+test("verkoop keeps its own routes, plus the shared taken-link", () => {
   const verkoop = SECTIONS[0];
   assert.deepEqual(
     verkoop.nav.map((n) => n.href),
-    ["/", "/leads"]
+    ["/", "/leads", "/taken"]
   );
 });

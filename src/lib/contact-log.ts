@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { audit } from "./dal";
+import { cancelCadence } from "./cadence-actions";
 import type { LeadStatus } from "./types";
 
 export type ContactType = "CALL" | "EMAIL" | "VISIT" | "NOTE";
@@ -120,6 +121,12 @@ export async function logContactForLead(input: {
     type,
     outcome,
   });
+
+  // Er is echt contact geweest — een herinnering die daarna nog afgaat is
+  // erger dan geen herinnering.
+  await cancelCadence({ leadId }, "LEAD_FOLLOWUP").catch((err) =>
+    console.error("kon opvolgreeks niet annuleren", err)
+  );
 
   // Teruggegeven zodat de aanroeper het formulier kan verversen; zie
   // `ContactLogState.savedId`.

@@ -163,19 +163,23 @@ model Customer {
   website   String?
   notes     String?
   leadId    String?  @unique
+  /// Wanneer er weer iets moet gebeuren bij deze klant — spiegelt Lead.nextActionAt.
+  /// Gevoed door de opvolgcadans, maar ook handmatig te zetten.
+  nextActionAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lead             Lead?             @relation(fields: [leadId], references: [id])
-  deals            Deal[]
-  purchases        Purchase[]
-  tasks            Task[]
-  meetings         Meeting[]
-  quotes           Quote[]
-  sourcingRequests SourcingRequest[]
-  contacts         Contact[]
-  creativeRequests CreativeRequest[]
-  documents        GeneratedDocument[]
+  lead              Lead?               @relation(fields: [leadId], references: [id])
+  deals             Deal[]
+  purchases         Purchase[]
+  tasks             Task[]
+  meetings          Meeting[]
+  quotes            Quote[]
+  sourcingRequests  SourcingRequest[]
+  contacts          Contact[]
+  creativeRequests  CreativeRequest[]
+  documents         GeneratedDocument[]
+  machinePlacements MachinePlacement[]
 }
 
 model Product {
@@ -192,10 +196,44 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  dealLines        DealLine[]
-  purchases        Purchase[]
-  creativeRequests CreativeRequest[]
-  brandAssets      BrandAsset[]
+  dealLines         DealLine[]
+  purchases         Purchase[]
+  creativeRequests  CreativeRequest[]
+  brandAssets       BrandAsset[]
+  machinePlacements MachinePlacement[]
+}
+
+/// Eén fysieke automaat bij één klant.
+///
+/// Bewust géén uitbreiding van Purchase: dat is een financieel record (wat
+/// verkocht, tegen welke prijs), dit is een operationeel feit met een eigen
+/// status. Drie automaten uit één deal kunnen op drie adressen staan en één kan
+/// later weg — dat past niet in een qty-veld op een verkooplijn.
+///
+/// Bewust licht: alleen registreren welk toestel waar staat sinds wanneer, geen
+/// onderhoudsplanning of storingshistoriek. Dat is expliciet latere scope.
+model MachinePlacement {
+  id           String    @id @default(cuid())
+  customerId   String
+  productId    String?
+  dealId       String?
+  /// Vrije tekst als het model niet (meer) in de catalogus staat.
+  model        String?
+  serialNumber String?
+  address      String?
+  city         String?
+  placedAt     DateTime  @default(now())
+  removedAt    DateTime?
+  status       String    @default("ACTIVE") // ACTIVE | REMOVED
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product  Product? @relation(fields: [productId], references: [id])
+  deal     Deal?    @relation(fields: [dealId], references: [id])
+
+  @@index([customerId])
 }
 
 model Deal {
@@ -224,16 +262,17 @@ model Deal {
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  owner            User?             @relation("DealOwner", fields: [ownerId], references: [id])
-  lead             Lead?             @relation(fields: [leadId], references: [id])
-  customer         Customer?         @relation(fields: [customerId], references: [id])
-  lines            DealLine[]
-  tasks            Task[]
-  meetings         Meeting[]
-  quotes           Quote[]
-  sourcingRequests SourcingRequest[]
-  creativeRequests CreativeRequest[]
-  documents        GeneratedDocument[]
+  owner             User?             @relation("DealOwner", fields: [ownerId], references: [id])
+  lead              Lead?             @relation(fields: [leadId], references: [id])
+  customer          Customer?         @relation(fields: [customerId], references: [id])
+  lines             DealLine[]
+  tasks             Task[]
+  meetings          Meeting[]
+  quotes            Quote[]
+  sourcingRequests  SourcingRequest[]
+  creativeRequests  CreativeRequest[]
+  documents         GeneratedDocument[]
+  machinePlacements MachinePlacement[]
 }
 
 model DealLine {
@@ -301,6 +340,7 @@ model User {
   emailDrafts       EmailDraft[]
   mailbox           MailboxConnection?
   mailSent          MailMessage[]
+  mailSnippetsEdited MailSnippet[]
   templatesOwned    DocumentTemplate[] @relation("TemplateOwner")
   templatesApproved DocumentTemplate[] @relation("TemplateApprover")
   documentsCreated  GeneratedDocument[] @relation("DocumentCreator")
@@ -681,6 +721,13 @@ model Task {
   customerId   String?
   dealId       String?
   assignedToId String?
+  /// Welke opvolgreeks deze taak aanmaakte, bv. "LEAD_FOLLOWUP" — zie cadences.ts.
+  /// Leeg voor een handmatig toegevoegde taak.
+  cadenceKey   String?
+  /// Volgorde binnen die inschrijving (1, 2, …). Samen met cadenceKey en
+  /// leadId/customerId is dit genoeg om "alle openstaande stappen van deze
+  /// inschrijving" te vinden zonder een apart inschrijvings-record.
+  cadenceStep  Int?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -688,6 +735,9 @@ model Task {
   customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
   deal       Deal?     @relation(fields: [dealId], references: [id], onDelete: Cascade)
   assignedTo User?     @relation(fields: [assignedToId], references: [id])
+
+  @@index([leadId, cadenceKey])
+  @@index([customerId, cadenceKey])
 }
 
 model Meeting {
@@ -752,13 +802,40 @@ model EmailDraft {
   /// Waar de tekst vandaan komt: AI of SJABLOON. Handig om achteraf te zien
   /// welke aanpak werkt.
   source     String    @default("AI")
+  /// Welke mailtekst als vertrekpunt diende, indien gekozen. Puur ter
+  /// traceerbaarheid — de AI schrijft nog steeds de uiteindelijke tekst.
+  sourceSnippetId String?
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
   lead      Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
   createdBy User? @relation(fields: [createdById], references: [id])
+  sourceSnippet MailSnippet? @relation(fields: [sourceSnippetId], references: [id])
 
   @@index([leadId])
+}
+
+/// Herbruikbare mailtekst per situatie — het startpunt dat de AI personaliseert.
+///
+/// Bewust lichter dan DocumentTemplate: dat model draagt versie, status en
+/// goedkeuring voor een document dat ondertekend wordt. Een mailtekst is een
+/// alinea die een medewerker in vijf seconden aanpast en toch naleest voor hij
+/// verstuurt — dat verdient geen goedkeuringsketen.
+model MailSnippet {
+  id          String   @id @default(cuid())
+  /// FIRST_OUTREACH | NO_REPLY_FOLLOWUP | POST_SALE_CHECKIN | POST_SALE_ONBOARDING
+  situation   String
+  label       String
+  body        String
+  active      Boolean  @default(true)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  updatedBy User?        @relation(fields: [updatedById], references: [id])
+  drafts    EmailDraft[]
+
+  @@index([situation])
 }
 
 /// De mailbox van één medewerker, gekoppeld via Microsoft 365.

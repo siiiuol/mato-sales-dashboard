@@ -12,6 +12,7 @@ import { formObject, idSchema } from "./validation";
 import { accessTokenFor, disconnectMailbox, MailboxError } from "./mailbox";
 import { fetchInbox, GraphError, sendMail } from "./graph";
 import { matchReplies, normaliseAddress } from "./reply-match";
+import { enrollLeadFollowup, cancelCadence } from "./cadence-actions";
 
 export type MailDraftState = {
   error?: string;
@@ -93,10 +94,14 @@ export async function generateMailDraft(
 ): Promise<MailDraftState> {
   const user = await requireUser(["admin", "sales"]);
   const input = z
-    .object({ leadId: idSchema, useWebsite: z.string().optional() })
+    .object({
+      leadId: idSchema,
+      useWebsite: z.string().optional(),
+      snippetId: z.string().cuid().optional().or(z.literal("")),
+    })
     .parse(formObject(formData));
 
-  const [lead, settings] = await Promise.all([
+  const [lead, settings, snippet] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: input.leadId },
       select: {
@@ -115,6 +120,12 @@ export async function generateMailDraft(
       },
     }),
     prisma.appSettings.findUnique({ where: { id: "default" } }),
+    input.snippetId
+      ? prisma.mailSnippet.findUnique({
+          where: { id: input.snippetId },
+          select: { id: true, body: true },
+        })
+      : Promise.resolve(null),
   ]);
 
   if (!lead) return { error: "Lead niet gevonden" };
@@ -132,6 +143,7 @@ export async function generateMailDraft(
     senderName: user.name,
     businessName: settings?.businessName || "MATO",
     websiteText,
+    snippetBody: snippet?.body,
   });
 
   try {
@@ -150,12 +162,14 @@ export async function generateMailDraft(
         status: "PREPARED",
         createdById: user.id,
         source: "AI",
+        sourceSnippetId: snippet?.id,
       },
     });
 
     await audit(user.id, "mail.drafted", "lead", lead.id, {
       draftId: saved.id,
       usedWebsite: Boolean(websiteText),
+      usedSnippet: Boolean(snippet),
     });
 
     revalidatePath(`/leads/${lead.id}`);
@@ -178,7 +192,7 @@ async function draftForUser(
   draftId: string,
   user: { id: string; role: string }
 ): Promise<
-  | { ok: true; draft: { id: string; leadId: string; status: string } }
+  | { ok: true; draft: { id: string; leadId: string; status: string; leadOwnerId: string | null } }
   | { ok: false; error: string }
 > {
   const draft = await prisma.emailDraft.findUnique({
@@ -199,7 +213,15 @@ async function draftForUser(
     };
   }
 
-  return { ok: true, draft: { id: draft.id, leadId: draft.leadId, status: draft.status } };
+  return {
+    ok: true,
+    draft: {
+      id: draft.id,
+      leadId: draft.leadId,
+      status: draft.status,
+      leadOwnerId: draft.lead.ownerId,
+    },
+  };
 }
 
 /** Bewaart de door de medewerker bijgewerkte tekst. */
@@ -347,7 +369,15 @@ export async function sendMailDraft(
       draftId: draft.id,
       to: input.data.to,
     });
+
+    // Los van het versturen zelf: een eerste mail start de opvolgreeks, maar
+    // mag het "verstuurd"-scherm niet laten falen als dit ergens op stuit.
+    await enrollLeadFollowup(draft.leadId, draft.leadOwnerId ?? user.id).catch((err) =>
+      console.error("kon niet inschrijven voor opvolgreeks", err)
+    );
+
     revalidatePath(`/leads/${draft.leadId}`);
+    revalidatePath("/taken");
     return { sent: true, to: input.data.to };
   } catch (err) {
     console.error("mail verstuurd maar niet vastgelegd", err);
@@ -493,7 +523,14 @@ export async function syncReplies(): Promise<MailSyncState> {
       }
     }
 
-    for (const leadId of touched) revalidatePath(`/leads/${leadId}`);
+    // Een antwoord is binnen; de opvolgreeks die daarop wachtte hoeft niet meer.
+    for (const leadId of touched) {
+      revalidatePath(`/leads/${leadId}`);
+      await cancelCadence({ leadId }, "LEAD_FOLLOWUP").catch((err) =>
+        console.error("kon opvolgreeks niet annuleren", err)
+      );
+    }
+    if (touched.size) revalidatePath("/taken");
     if (added) await audit(user.id, "mail.replies_synced", "user", user.id, { added });
 
     return { checked: true, added, failed, truncated };

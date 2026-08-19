@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { saveSettings } from "@/lib/actions";
 import { FLANDERS_ZONES } from "@/lib/constants";
@@ -217,6 +218,30 @@ export default async function SettingsPage({
           Instellingen opslaan
         </button>
       </form>
+
+      <section className="panel p-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="label text-[var(--accent)]">Mailteksten</div>
+          <p className="text-sm text-[var(--text-dim)] mt-1">
+            Herbruikbare vertrekpunten per situatie, te kiezen bij het opstellen van een mail.
+          </p>
+        </div>
+        <Link href="/settings/mail-teksten" className="btn shrink-0">
+          Beheren
+        </Link>
+      </section>
+
+      <section className="panel p-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="label text-[var(--accent)]">Documentsjablonen</div>
+          <p className="text-sm text-[var(--text-dim)] mt-1">
+            Contracten en andere genummerde documenten, per code geversioneerd.
+          </p>
+        </div>
+        <Link href="/settings/sjablonen" className="btn shrink-0">
+          Beheren
+        </Link>
+      </section>
     </div>
   );
 }

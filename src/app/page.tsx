@@ -11,6 +11,7 @@ import {
   statusLabel,
 } from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
+import { TaskStrip } from "@/components/TaskStrip";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,8 @@ export default async function HomePage({
         <Figure label="Vandaag opvolgen" value={String(due.length)} />
         <Figure label="Verkocht" value={euro(revenue)} />
       </section>
+
+      <TaskStrip userId={user.id} />
 
       <div className="flex flex-wrap gap-2">
         <Link href="/" className={`badge ${!sp.status ? "badge-live" : ""}`}>

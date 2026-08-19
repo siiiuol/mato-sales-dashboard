@@ -333,3 +333,102 @@ test("email visit and note get their own labels", () => {
 test("a lead with no history yields an empty timeline, not a crash", () => {
   assert.deepEqual(buildActivity(EMPTY), []);
 });
+
+test("an open task is not on the timeline, only completed or cancelled ones", () => {
+  // De takenlijst toont wat nog moet gebeuren; de geschiedenis toont wat er
+  // gebeurd is. Een open taak op de tijdlijn zou hetzelfde ding twee keer
+  // tonen, één keer als "nog te doen" en één keer als "gebeurtenis".
+  const items = buildActivity({
+    ...EMPTY,
+    tasks: [
+      {
+        id: "t1",
+        title: "Check-in na een maand",
+        status: "OPEN",
+        completedAt: null,
+        updatedAt: at("2026-08-01T09:00:00Z"),
+      },
+    ],
+  });
+  assert.equal(items.length, 0);
+});
+
+test("a completed task shows on the timeline at its completion time", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    tasks: [
+      {
+        id: "t2",
+        title: "Nazorg — eerste week",
+        status: "DONE",
+        completedAt: at("2026-08-10T14:00:00Z"),
+        updatedAt: at("2026-08-10T14:00:00Z"),
+        assignedTo: { name: "Jonas" },
+      },
+    ],
+  });
+  assert.equal(item.kind, "task");
+  assert.equal(item.title, "Taak afgerond");
+  assert.equal(item.detail, "Nazorg — eerste week");
+  assert.equal(item.actor, "Jonas");
+  assert.equal(item.at.toISOString(), "2026-08-10T14:00:00.000Z");
+});
+
+test("a cancelled task is labelled differently from a completed one", () => {
+  const [item] = buildActivity({
+    ...EMPTY,
+    tasks: [
+      {
+        id: "t3",
+        title: "Opvolgen — geen reactie",
+        status: "CANCELLED",
+        completedAt: null,
+        updatedAt: at("2026-08-11T09:00:00Z"),
+      },
+    ],
+  });
+  assert.equal(item.title, "Taak geannuleerd");
+});
+
+test("the audit-log fallback for a task action is suppressed by the richer task entry", () => {
+  // Zonder deze ontdubbeling staat elke afgeronde taak twee keer op de
+  // tijdlijn: één keer via het taken-object, één keer als kale audit-regel.
+  const items = buildActivity({
+    ...EMPTY,
+    tasks: [
+      {
+        id: "t4",
+        title: "Kwartaalcheck",
+        status: "DONE",
+        completedAt: at("2026-08-12T09:00:00Z"),
+        updatedAt: at("2026-08-12T09:00:00Z"),
+      },
+    ],
+    audits: [
+      {
+        id: "a1",
+        createdAt: at("2026-08-12T09:00:00Z"),
+        action: "task.completed",
+        detail: null,
+      },
+    ],
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, "task-t4");
+});
+
+test("task counts show up in activityCounts", () => {
+  const items = buildActivity({
+    ...EMPTY,
+    tasks: [
+      {
+        id: "t5",
+        title: "x",
+        status: "DONE",
+        completedAt: at("2026-08-01T09:00:00Z"),
+        updatedAt: at("2026-08-01T09:00:00Z"),
+      },
+    ],
+  });
+  assert.equal(activityCounts(items).task, 1);
+});

@@ -7,38 +7,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "./db";
 import { audit, requireUser } from "./dal";
-import {
-  documentAmount,
-  documentDate,
-  fillTemplate,
-  formatDocumentNumber,
-  missingPlaceholders,
-  priceBreakdown,
-  sequenceId,
-} from "./documents";
-import {
-  CONTRACT_CODE,
-  CONTRACT_DEFAULTS,
-  CONTRACT_PREFIX,
-} from "./contract-template";
+import { documentAmount, priceBreakdown } from "./documents";
+import { generateDocumentFromTemplate, TemplateNotActiveError } from "./document-numbering";
+import { CONTRACT_CODE, CONTRACT_DEFAULTS } from "./contract-template";
 import { formObject, idSchema } from "./validation";
-
-/**
- * Geeft het volgende documentnummer uit.
- *
- * De teller loopt alleen omhoog en wordt met één `upsert` opgehoogd, zodat twee
- * gelijktijdige aanvragen niet hetzelfde nummer kunnen krijgen. Een nummer dat
- * twee keer bestaat is in de boekhouding een probleem dat pas maanden later
- * opvalt.
- */
-async function allocateNumber(prefix: string, year: number): Promise<string> {
-  const sequence = await prisma.documentSequence.upsert({
-    where: { id: sequenceId(prefix, year) },
-    create: { id: sequenceId(prefix, year), prefix, year, counter: 1 },
-    update: { counter: { increment: 1 } },
-  });
-  return formatDocumentNumber(prefix, year, sequence.counter);
-}
 
 const generateSchema = z.object({
   leadId: idSchema,
@@ -59,26 +31,17 @@ export async function generateContract(formData: FormData) {
   const user = await requireUser(["admin", "sales"]);
   const input = generateSchema.parse(formObject(formData));
 
-  const [lead, product, template, settings] = await Promise.all([
+  const [lead, product, settings] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: input.leadId },
       include: { customer: true, owner: { select: { id: true, name: true } } },
     }),
     prisma.product.findUnique({ where: { id: input.productId } }),
-    prisma.documentTemplate.findFirst({
-      where: { code: CONTRACT_CODE },
-      orderBy: { version: "desc" },
-    }),
     prisma.appSettings.findUnique({ where: { id: "default" } }),
   ]);
 
   if (!lead) throw new Error("Lead niet gevonden");
   if (!product) throw new Error("Product niet gevonden");
-  if (!template) {
-    throw new Error(
-      "Er is nog geen contractsjabloon. Draai `npm run db:seed` om het aan te maken."
-    );
-  }
 
   // Alleen de eigenaar maakt het contract. Anders zet iemand anders zijn naam
   // onder een verkoop die niet van hem is, en dat is precies het gegeven waar
@@ -89,17 +52,13 @@ export async function generateContract(formData: FormData) {
     );
   }
 
-  const now = new Date();
   const total = input.price * input.quantity;
   const { net, vat, gross } = priceBreakdown(total);
-  const number = await allocateNumber(CONTRACT_PREFIX, now.getFullYear());
 
   const context: Record<string, string> = {
     ...CONTRACT_DEFAULTS,
     verkoper_naam: settings?.businessName || CONTRACT_DEFAULTS.verkoper_naam,
     verkoper_medewerker: user.name,
-    documentnummer: number,
-    datum: documentDate(now),
     plaats: lead.city ?? "",
     klant_naam: lead.customer?.name ?? lead.name,
     klant_adres: lead.address ?? "",
@@ -117,31 +76,27 @@ export async function generateContract(formData: FormData) {
     ...(input.note ? { betalingsvoorwaarden: input.note } : {}),
   };
 
-  const body = fillTemplate(template.body, context);
-  const missing = missingPlaceholders(body);
-
-  const document = await prisma.generatedDocument.create({
-    data: {
-      number,
+  let document;
+  try {
+    ({ document } = await generateDocumentFromTemplate({
+      templateCode: CONTRACT_CODE,
+      context,
       title: `Verkoopovereenkomst ${lead.customer?.name ?? lead.name}`,
-      templateId: template.id,
-      templateCode: template.code,
-      templateVersion: template.version,
-      language: "nl",
-      // Ontbrekende velden houden het document in concept. Een contract met
-      // {{klant_btw}} er nog in hoort niet als klaar te boek te staan.
-      status: missing.length ? "DRAFT" : "READY",
-      body,
-      contextJson: JSON.stringify(context),
-      validationJson: JSON.stringify({ missing }),
+      createdById: user.id,
       leadId: lead.id,
       customerId: lead.customer?.id ?? null,
-      createdById: user.id,
-    },
-  });
+    }));
+  } catch (err) {
+    if (err instanceof TemplateNotActiveError) {
+      throw new Error(
+        "Er is nog geen actief contractsjabloon. Draai `npm run db:seed` om het aan te maken."
+      );
+    }
+    throw err;
+  }
 
   await audit(user.id, "document.generated", "document", document.id, {
-    number,
+    number: document.number,
     leadId: lead.id,
     product: product.name,
     total: gross,
