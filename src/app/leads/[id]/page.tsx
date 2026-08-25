@@ -210,17 +210,24 @@ export default async function LeadDetailPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
-    prisma.leadComment.findMany({
-      where: { leadId: lead.id },
-      orderBy: { createdAt: "asc" },
-      take: 100,
-      select: {
-        id: true,
-        body: true,
-        createdAt: true,
-        author: { select: { id: true, name: true } },
-      },
-    }),
+    prisma.leadComment
+      .findMany({
+        where: { leadId: lead.id },
+        orderBy: { createdAt: "asc" },
+        take: 100,
+        select: {
+          id: true,
+          body: true,
+          createdAt: true,
+          author: { select: { id: true, name: true } },
+        },
+      })
+      .catch(() => [] as Array<{
+        id: string;
+        body: string;
+        createdAt: Date;
+        author: { id: string; name: string };
+      }>),
   ]);
 
   const timeline = buildActivity({

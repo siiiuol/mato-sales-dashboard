@@ -3,12 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "engines": {
-    "node": "20.x"
+    "node": "24.x"
   },
   "scripts": {
     "dev": "next dev",
     "build": "node prisma/prepare-postgres.mjs && prisma generate --schema prisma/schema.postgresql.prisma && next build",
-    "vercel-build": "node prisma/prepare-postgres.mjs && prisma generate --schema prisma/schema.postgresql.prisma && node scripts/migrate-if-postgres.mjs && next build",
+    "vercel-build": "node prisma/prepare-postgres.mjs && prisma generate --schema prisma/schema.postgresql.prisma && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -19,7 +19,7 @@
     "postinstall": "prisma generate",
     "db:postgres:schema": "node prisma/prepare-postgres.mjs",
     "db:migrate:dev": "node prisma/prepare-postgres.mjs && prisma migrate dev --schema prisma/schema.postgresql.prisma",
-    "db:migrate:deploy": "node prisma/prepare-postgres.mjs && prisma migrate deploy --schema prisma/schema.postgresql.prisma",
+    "db:migrate:deploy": "node prisma/prepare-postgres.mjs && node scripts/migrate-if-postgres.mjs",
     "db:migrate:status": "node prisma/prepare-postgres.mjs && prisma migrate status --schema prisma/schema.postgresql.prisma",
     "settings:encrypt-secrets": "tsx scripts/encrypt-settings-secrets.ts",
     "backup": "node scripts/backup-db.mjs"
