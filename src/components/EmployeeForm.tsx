@@ -137,6 +137,20 @@ export function EmployeeForm() {
         />
       </Field>
 
+      <Field
+        label="Huurcommissie (€)"
+        hint="Vast bedrag per geslaagd shop-huurcontract in Diksmuide."
+      >
+        <input
+          name="rentalCommissionFixed"
+          type="number"
+          min="0"
+          step="1"
+          defaultValue="0"
+          className="input"
+        />
+      </Field>
+
       <div className="flex gap-2 pt-2">
         <button type="submit" className="btn btn-primary" disabled={pending}>
           {pending ? "Bezig…" : "Account aanmaken"}

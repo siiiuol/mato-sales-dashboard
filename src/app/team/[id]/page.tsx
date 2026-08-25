@@ -14,12 +14,18 @@ import {
 import {
   bucketByDay,
   commissionForDeals,
+  commissionForRentals,
+  totalCommission,
   conversionRate,
   euro,
   percent,
   roi,
 } from "@/lib/team-stats";
 import { idSchema } from "@/lib/validation";
+import {
+  deleteMailExample,
+  saveMailStyle,
+} from "@/lib/mail-style-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +47,16 @@ export default async function EmployeePage({
   const parsed = idSchema.safeParse((await params).id);
   if (!parsed.success) notFound();
 
-  const employee = await prisma.user.findUnique({ where: { id: parsed.data } });
+  const employee = await prisma.user.findUnique({
+    where: { id: parsed.data },
+    include: {
+      mailExamples: {
+        where: { approved: true },
+        orderBy: { createdAt: "desc" },
+        take: 10,
+      },
+    },
+  });
   if (!employee) notFound();
 
   const now = new Date();
@@ -53,7 +68,7 @@ export default async function EmployeePage({
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [calls, wonDeals, ownedLeads, recentLeads] = await Promise.all([
+  const [calls, wonDeals, ownedLeads, recentLeads, monthRentals] = await Promise.all([
     prisma.outreachEvent.findMany({
       where: {
         createdById: employee.id,
@@ -81,6 +96,13 @@ export default async function EmployeePage({
       take: 8,
       select: { id: true, name: true, status: true, city: true, lastTouchedAt: true },
     }),
+    prisma.customer.count({
+      where: {
+        ownerId: employee.id,
+        kind: "SHOP_TENANT",
+        createdAt: { gte: monthStart },
+      },
+    }),
   ]);
 
   const buckets = bucketByDay(
@@ -100,7 +122,9 @@ export default async function EmployeePage({
   );
   const monthValues = monthDeals.map((deal) => deal.wonValue ?? 0);
   const monthRevenue = monthValues.reduce((sum, value) => sum + value, 0);
-  const monthCommission = commissionForDeals(employee, monthValues);
+  const saleCommission = commissionForDeals(employee, monthValues);
+  const rentalCommission = commissionForRentals(employee, monthRentals);
+  const monthCommission = totalCommission(employee, monthValues, monthRentals);
   const monthResult = roi({
     revenue: monthRevenue,
     cost: employee.monthlyCost,
@@ -113,10 +137,14 @@ export default async function EmployeePage({
   );
   const monthCalls = calls.filter((call) => call.createdAt >= monthStart).length;
 
-  const commissionDescription =
+  const saleCommissionDescription =
     employee.commissionType === "FIXED"
       ? `${euro(employee.commissionValue)} per verkoop`
       : `${employee.commissionValue}% van de verkoop`;
+  const rentalCommissionDescription =
+    employee.rentalCommissionFixed > 0
+      ? `${euro(employee.rentalCommissionFixed)} per huurcontract`
+      : "geen";
 
   return (
     <div className="space-y-6 anim-lock">
@@ -174,6 +202,65 @@ export default async function EmployeePage({
         />
       </section>
 
+      <section className="panel p-4 sm:p-5 space-y-4">
+        <div>
+          <h2 className="label text-[var(--accent)]">Persoonlijke mailstijl</h2>
+          <p className="text-sm text-[var(--text-dim)] mt-1">
+            Korte regels en goedgekeurde verzonden mails sturen toon, lengte,
+            opening en afsluiting van nieuwe concepten.
+          </p>
+        </div>
+        <form action={saveMailStyle} className="space-y-2">
+          <input type="hidden" name="userId" value={employee.id} />
+          <textarea
+            name="mailStyleNotes"
+            className="textarea"
+            rows={5}
+            maxLength={5000}
+            defaultValue={employee.mailStyleNotes ?? ""}
+            placeholder={"Bijvoorbeeld:\n- Kort en direct\n- Spreek aan met u\n- Open zonder smalltalk\n- Sluit af met Groeten"}
+          />
+          <button type="submit" className="btn btn-primary">
+            Stijlregels bewaren
+          </button>
+        </form>
+        <div>
+          <h3 className="label mb-2">
+            Goedgekeurde voorbeelden · {employee.mailExamples.length}
+          </h3>
+          {employee.mailExamples.length ? (
+            <ul className="space-y-2">
+              {employee.mailExamples.map((example) => (
+                <li
+                  key={example.id}
+                  className="rounded-lg border border-[var(--border)] p-3 text-sm"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <span className="font-medium">{example.subject}</span>
+                      <p className="text-[var(--text-dim)] mt-1 line-clamp-3 whitespace-pre-wrap">
+                        {example.body}
+                      </p>
+                    </div>
+                    <form action={deleteMailExample}>
+                      <input type="hidden" name="exampleId" value={example.id} />
+                      <input type="hidden" name="userId" value={employee.id} />
+                      <button type="submit" className="btn btn-sm btn-ghost">
+                        Verwijder
+                      </button>
+                    </form>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-[var(--text-dim)]">
+              Bewaar een aangepaste verzonden mail op de leadfiche als voorbeeld.
+            </p>
+          )}
+        </div>
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="panel p-4 lg:col-span-2">
           <DailyBars buckets={buckets} label={`Gesprekken per dag · ${DAYS} dagen`} />
@@ -189,8 +276,17 @@ export default async function EmployeePage({
           <h2 className="label text-[var(--accent)]">Wat deze maand kost en opbrengt</h2>
           <dl className="text-sm space-y-2">
             <Row label="Kost per maand" value={euro(employee.monthlyCost)} />
-            <Row label="Commissie-afspraak" value={commissionDescription} />
-            <Row label="Commissie deze maand" value={euro(monthCommission)} />
+            <Row label="Commissie verkoop" value={saleCommissionDescription} />
+            <Row label="Commissie huur" value={rentalCommissionDescription} />
+            <Row
+              label="Commissie deze maand"
+              value={`${euro(monthCommission)}${
+                monthRentals > 0 || saleCommission > 0
+                  ? ` (verkoop ${euro(saleCommission)} · huur ${euro(rentalCommission)})`
+                  : ""
+              }`}
+            />
+            <Row label="Huurcontracts deze maand" value={String(monthRentals)} />
             <Row label="Totale kost" value={euro(monthResult.totalCost)} />
             <Row
               label="Resultaat"

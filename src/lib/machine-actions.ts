@@ -72,4 +72,6 @@ export async function markMachineRemoved(formData: FormData) {
     customerId: input.customerId,
   });
   revalidatePath(`/klanten/${input.customerId}`);
+  revalidatePath("/shop");
+  revalidatePath(`/shop/${input.customerId}`);
 }

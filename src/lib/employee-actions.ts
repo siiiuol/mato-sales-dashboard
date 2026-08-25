@@ -25,6 +25,7 @@ const employeeSchema = z.object({
   monthlyCost: z.coerce.number().min(0).max(1_000_000).default(0),
   commissionType: z.enum(["PERCENT", "FIXED"]),
   commissionValue: z.coerce.number().min(0).max(1_000_000).default(0),
+  rentalCommissionFixed: z.coerce.number().min(0).max(1_000_000).default(0),
 });
 
 export type EmployeeFormState = {
@@ -76,6 +77,7 @@ export async function createEmployee(
       monthlyCost: input.monthlyCost,
       commissionType: input.commissionType,
       commissionValue: input.commissionValue,
+      rentalCommissionFixed: input.rentalCommissionFixed,
       photoUrl,
       startedAt: new Date(),
     },
@@ -124,6 +126,7 @@ export async function updateEmployee(formData: FormData) {
       monthlyCost: input.monthlyCost,
       commissionType: input.commissionType,
       commissionValue: input.commissionValue,
+      rentalCommissionFixed: input.rentalCommissionFixed,
       photoUrl,
       ...(roleChanged ? { sessionVersion: { increment: 1 } } : {}),
     },

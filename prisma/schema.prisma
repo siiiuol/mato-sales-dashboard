@@ -27,6 +27,7 @@ model Lead {
   enterpriseName              String?
   source                      String    @default("lead_bot")
   sourceVersion               String?
+  campaignId                  String?
   score                       Int       @default(0)
   /// Aantal beoordelingen bij de vondst — de maat voor "grotere zaak".
   ///
@@ -38,6 +39,10 @@ model Lead {
   tier                        String?
   reason                      String?
   evidenceSummary             String?
+  profileEnrichedAt           DateTime?
+  rating                      Float?
+  openingHours                String?
+  businessStatus              String?
   recommendedMachine          String?
   recommendedAngle            String?
   phoneOpener                 String?
@@ -58,6 +63,10 @@ model Lead {
   doNotContact                Boolean   @default(false)
   suppressionReason           String?
   suppressionCheckedAt        DateTime?
+  /// Gestructureerde stop-/verliesreden voor rapportering.
+  lossReason                  String?
+  /// Tijdelijk geparkeerd tot dit moment; `nextActionAt` blijft de werklijst sturen.
+  parkedUntil                 DateTime?
 
   /// Zachte claim: wie deze zaak nú voor zich heeft in Werk. Vervalt vanzelf na
   /// CLAIM_TTL_MINUTES, zodat een afgebroken sessie geen lead gijzelt.
@@ -83,9 +92,29 @@ model Lead {
   contacts    Contact[]
   documents   GeneratedDocument[]
   mail        MailMessage[]
+  shopWaitlistEntries ShopWaitlist[]
+  campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  comments     LeadComment[]
 
   @@index([claimedById])
   @@index([ownerId])
+  @@index([ownerId, status, nextActionAt])
+  @@index([complianceStatus, status, nextActionAt])
+  @@index([campaignId])
+}
+
+/// Interne teamchat op een leadfiche — wijzigt de leadstatus niet.
+model LeadComment {
+  id        String   @id @default(cuid())
+  leadId    String
+  authorId  String
+  body      String
+  createdAt DateTime @default(now())
+
+  lead   Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([leadId, createdAt])
 }
 
 /// Elke mail die echt vertrokken of binnengekomen is, per lead.
@@ -163,6 +192,10 @@ model Customer {
   website   String?
   notes     String?
   leadId    String?  @unique
+  /// BUYER = verkoopklant (automaat gekocht). SHOP_TENANT = huurt een automaat in de shop Diksmuide.
+  kind      String   @default("BUYER")
+  /// Wie deze klant/huurder binnenbracht (commissie).
+  ownerId   String?
   /// Wanneer er weer iets moet gebeuren bij deze klant — spiegelt Lead.nextActionAt.
   /// Gevoed door de opvolgcadans, maar ook handmatig te zetten.
   nextActionAt DateTime?
@@ -170,6 +203,7 @@ model Customer {
   updatedAt DateTime @updatedAt
 
   lead              Lead?               @relation(fields: [leadId], references: [id])
+  owner             User?               @relation("CustomerOwner", fields: [ownerId], references: [id])
   deals             Deal[]
   purchases         Purchase[]
   tasks             Task[]
@@ -180,6 +214,10 @@ model Customer {
   creativeRequests  CreativeRequest[]
   documents         GeneratedDocument[]
   machinePlacements MachinePlacement[]
+  contentItems      ContentItem[]
+
+  @@index([kind])
+  @@index([ownerId])
 }
 
 model Product {
@@ -189,6 +227,8 @@ model Product {
   sku         String?
   description String?
   specs       String?
+  /// Relatief pad of URL naar een productfoto (factuur/contractpreview).
+  imageUrl    String?
   listPrice   Float
   cost        Float    @default(0)
   recurring   Boolean  @default(false)
@@ -222,6 +262,19 @@ model MachinePlacement {
   serialNumber String?
   address      String?
   city         String?
+  /// EXTERNAL = bij de klant. SHOP_DIKSMUIDE = fysieke shop IJzerlaan 13.
+  site         String    @default("EXTERNAL")
+  /// FIXED | COMMISSION | MIX | OTHER — huurformule in de shop.
+  contractType String?
+  /// Vrije label of documentnummer van de overeenkomst.
+  contractRef  String?
+  /// Plaatsnummer in de shop (1…shopCapacity). Alleen zinvol bij site SHOP_*.
+  shopSlot     Int?
+  contractStartedAt DateTime?
+  contractEndsAt    DateTime?
+  noticePeriodDays  Int       @default(30)
+  /// ACTIVE | NOTICE_SENT | RENEWING | ENDING
+  renewalStatus     String    @default("ACTIVE")
   placedAt     DateTime  @default(now())
   removedAt    DateTime?
   status       String    @default("ACTIVE") // ACTIVE | REMOVED
@@ -232,8 +285,13 @@ model MachinePlacement {
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   product  Product? @relation(fields: [productId], references: [id])
   deal     Deal?    @relation(fields: [dealId], references: [id])
+  contentItems ContentItem[]
 
   @@index([customerId])
+  @@index([site, status])
+  @@index([site, shopSlot])
+  @@index([site, status, contractStartedAt])
+  @@index([site, status, contractEndsAt])
 }
 
 model Deal {
@@ -249,6 +307,7 @@ model Deal {
   wonAt                DateTime?
   expectedMachineCount Int       @default(1)
   recurringValue       Float     @default(0)
+  expectedValue        Float     @default(0)
   probability          Int       @default(25)
   grossMargin          Float?
   lossReason           String?
@@ -273,6 +332,9 @@ model Deal {
   creativeRequests  CreativeRequest[]
   documents         GeneratedDocument[]
   machinePlacements MachinePlacement[]
+
+  @@index([ownerId, stage, expectedCloseAt])
+  @@index([stage, updatedAt])
 }
 
 model DealLine {
@@ -314,11 +376,15 @@ model User {
   /// PERCENT (deel van de dealwaarde) of FIXED (vast bedrag per verkoop).
   commissionType  String @default("PERCENT")
   commissionValue Float  @default(0)
+  /// Vast bedrag per geslaagd shop-huurcontract (Diksmuide).
+  rentalCommissionFixed Float @default(0)
   startedAt       DateTime?
   lastLoginAt     DateTime?
   /// Zit in het sessietoken. Ophogen maakt alle openstaande sessies ongeldig,
   /// zodat een gedeactiveerde medewerker er meteen uit ligt.
   sessionVersion Int @default(0)
+  /// Korte, door de medewerker goedgekeurde schrijfregels voor AI-mail.
+  mailStyleNotes String?
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -326,6 +392,7 @@ model User {
   leadsClaimed Lead[] @relation("LeadClaimedBy")
   leadsOwned   Lead[] @relation("LeadOwner")
   dealsOwned   Deal[] @relation("DealOwner")
+  customersOwned Customer[] @relation("CustomerOwner")
 
   tasks            Task[]
   outreach         OutreachEvent[]
@@ -345,6 +412,41 @@ model User {
   templatesApproved DocumentTemplate[] @relation("TemplateApprover")
   documentsCreated  GeneratedDocument[] @relation("DocumentCreator")
   documentsApproved GeneratedDocument[] @relation("DocumentApprover")
+  mailExamples      MailExample[]
+  leadComments      LeadComment[]
+}
+
+model MailExample {
+  id                  String   @id @default(cuid())
+  userId              String
+  subject             String
+  body                String
+  approved            Boolean  @default(true)
+  sourceMailMessageId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, approved, createdAt])
+}
+
+model ShopWaitlist {
+  id                  String   @id @default(cuid())
+  name                String
+  phone               String?
+  email               String?
+  notes               String?
+  preferredSlot       Int?
+  status              String   @default("WAITING")
+  leadId              String?
+  convertedCustomerId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
 }
 
 model Campaign {
@@ -367,6 +469,26 @@ model Campaign {
 
   creativeRequests CreativeRequest[]
   assets           BrandAsset[]
+  leads            Lead[]
+}
+
+model ContentItem {
+  id                 String    @id @default(cuid())
+  title              String
+  theme              String
+  channel            String
+  plannedAt          DateTime?
+  status             String    @default("DRAFT")
+  notes              String?
+  customerId         String?
+  machinePlacementId String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  customer         Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  machinePlacement MachinePlacement? @relation(fields: [machinePlacementId], references: [id], onDelete: SetNull)
+
+  @@index([status, plannedAt])
 }
 
 model CreativeRequest {
@@ -738,6 +860,7 @@ model Task {
 
   @@index([leadId, cadenceKey])
   @@index([customerId, cadenceKey])
+  @@index([assignedToId, status, dueAt])
 }
 
 model Meeting {
@@ -885,6 +1008,8 @@ model AuditEvent {
   createdAt  DateTime @default(now())
 
   actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
 }
 
 model AppSettings {
@@ -916,4 +1041,6 @@ model AppSettings {
   exclusionRadiusKm   Float  @default(0.5)
   pitchTemplates      String @default("{}")
   accent              String @default("green")
+  /// Max. fysieke plaatsen in de Automatenshop Diksmuide (showroom/vastgoed).
+  shopCapacity        Int    @default(8)
 }

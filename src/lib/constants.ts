@@ -16,9 +16,16 @@ export const SECTIONS = [
     home: "/",
     prefix: null,
     nav: [
-      { href: "/", label: "Mijn leads" },
+      { href: "/", label: "Vandaag" },
+      { href: "/bellen", label: "Belmodus" },
       { href: "/leads", label: "Leads" },
+      { href: "/deals", label: "Deals" },
+    ],
+    more: [
+      { href: "/aios", label: "Assistent" },
+      { href: "/rapporten", label: "Rapporten" },
       { href: "/taken", label: "Mijn taken" },
+      { href: "/handleiding", label: "Handleiding" },
     ],
   },
   {
@@ -26,10 +33,11 @@ export const SECTIONS = [
     label: "Reclame",
     home: "/reclame",
     prefix: "/reclame",
-    nav: [
-      { href: "/reclame", label: "Campagnes" },
+    nav: [{ href: "/reclame", label: "Campagnes" }],
+    more: [
+      { href: "/reclame/content", label: "Contentkalender" },
       { href: "/reclame/materiaal", label: "Materiaal" },
-      { href: "/reclame/merk", label: "Merk" },
+      { href: "/handleiding", label: "Handleiding" },
     ],
   },
   {
@@ -37,10 +45,16 @@ export const SECTIONS = [
     label: "Klanten",
     home: "/klanten",
     prefix: "/klanten",
-    nav: [
-      { href: "/klanten", label: "Klanten" },
-      { href: "/taken", label: "Mijn taken" },
-    ],
+    nav: [{ href: "/klanten", label: "Klanten" }],
+    more: [{ href: "/handleiding", label: "Handleiding" }],
+  },
+  {
+    key: "shop",
+    label: "Shop",
+    home: "/shop",
+    prefix: "/shop",
+    nav: [{ href: "/shop", label: "Huurders" }],
+    more: [{ href: "/handleiding", label: "Handleiding" }],
   },
 ] as const;
 
@@ -292,6 +306,21 @@ export const COMPLIANCE_LABELS: Record<string, string> = {
   CLEARED: "Goedgekeurd",
   BLOCKED: "Geblokkeerd",
 };
+
+export const LOSS_REASONS = [
+  { value: "NO_INTEREST", label: "Geen interesse" },
+  { value: "TIMING", label: "Timing niet goed" },
+  { value: "PRICE", label: "Prijs of budget" },
+  { value: "NO_FIT", label: "Geen passende oplossing" },
+  { value: "COMPETITOR", label: "Koos een concurrent" },
+  { value: "UNREACHABLE", label: "Niet bereikbaar" },
+  { value: "DUPLICATE", label: "Dubbel record" },
+  { value: "OTHER", label: "Andere reden" },
+] as const;
+
+export function lossReasonLabel(value: string | null | undefined) {
+  return LOSS_REASONS.find((reason) => reason.value === value)?.label ?? value ?? "—";
+}
 
 /** Categorieën komen uit OpenStreetMap/Places en worden Engels opgeslagen. */
 export const CATEGORY_LABELS: Record<string, string> = {
@@ -628,6 +657,37 @@ export const MACHINE_STATUS_LABELS: Record<string, string> = {
 
 export function machineStatusLabel(status: string) {
   return MACHINE_STATUS_LABELS[status] ?? status;
+}
+
+/** Fysieke Automatenshop — vaste locatie voor huurders. */
+export const SHOP_DIKSMUIDE = {
+  label: "MATO Automatenshop Diksmuide",
+  address: "IJzerlaan 13",
+  postalCode: "8600",
+  city: "Diksmuide",
+  site: "SHOP_DIKSMUIDE",
+} as const;
+
+export const CUSTOMER_KINDS = [
+  { value: "BUYER", label: "Verkoopklant" },
+  { value: "SHOP_TENANT", label: "Shop-huurder" },
+] as const;
+
+export function customerKindLabel(kind: string) {
+  return CUSTOMER_KINDS.find((k) => k.value === kind)?.label ?? kind;
+}
+
+/** Huurformule voor een automaat in de shop. */
+export const SHOP_CONTRACT_TYPES = [
+  { value: "FIXED", label: "Formule A — vaste huur" },
+  { value: "COMMISSION", label: "Formule B — commissie %" },
+  { value: "MIX", label: "Formule C — vast + %" },
+  { value: "OTHER", label: "Andere / nog te bepalen" },
+] as const;
+
+export function shopContractTypeLabel(type: string | null | undefined) {
+  if (!type) return "—";
+  return SHOP_CONTRACT_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
 /**

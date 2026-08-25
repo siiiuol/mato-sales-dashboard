@@ -4,7 +4,6 @@ import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
 import {
   contactLead,
-  markLeadWon,
   releaseLead,
   setLeadCompliance,
   skipLead,
@@ -18,10 +17,26 @@ import { ContractForm } from "@/components/ContractForm";
 import { MailDraftPanel } from "@/components/MailDraftPanel";
 import { ReplySyncButton } from "@/components/ReplySyncButton";
 import { ContactLogPanel } from "@/components/ContactLogPanel";
-import { COMPLIANCE_LABELS, statusLabel } from "@/lib/constants";
+import { AiosAssistPanel } from "@/components/AiosAssistPanel";
+import {
+  COMPLIANCE_LABELS,
+  categoryLabel,
+  lossReasonLabel,
+  statusLabel,
+} from "@/lib/constants";
 import { euro } from "@/lib/team-stats";
 import { activityCounts, buildActivity, contactCount } from "@/lib/activity";
 import { idSchema } from "@/lib/validation";
+import { CadencePanel } from "@/components/CadencePanel";
+import { StopLeadPanel } from "@/components/StopLeadPanel";
+import { DealPanel } from "@/components/DealPanel";
+import { NegotiationStrip } from "@/components/NegotiationStrip";
+import { saveMailAsExample } from "@/lib/mail-style-actions";
+import { ProductAdvisor } from "@/components/ProductAdvisor";
+import { assignLeadCampaign } from "@/lib/campaign-actions";
+import { LeadChatPanel } from "@/components/LeadChatPanel";
+import { LeadProfileEnrichPanel } from "@/components/LeadProfileEnrichPanel";
+import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -54,21 +69,47 @@ export default async function LeadDetailPage({
         include: { createdBy: { select: { name: true } } },
       },
       owner: { select: { id: true, name: true } },
+      customer: { select: { id: true, kind: true } },
       deals: {
-        where: { wonAt: { not: null } },
-        orderBy: { wonAt: "desc" },
+        orderBy: { updatedAt: "desc" },
         select: {
           id: true,
           title: true,
+          stage: true,
+          expectedValue: true,
+          probability: true,
+          expectedCloseAt: true,
+          nextStep: true,
+          expectedMachineCount: true,
           wonValue: true,
           wonAt: true,
           owner: { select: { name: true } },
+          lines: {
+            select: {
+              productId: true,
+              qty: true,
+              unitPrice: true,
+              product: { select: { name: true } },
+            },
+          },
         },
       },
     },
   });
   if (!lead) notFound();
-  const [audits, products, documents, drafts, mail, mailbox, tasks, snippets] = await Promise.all([
+  const [
+    audits,
+    products,
+    documents,
+    drafts,
+    mail,
+    mailbox,
+    tasks,
+    snippets,
+    cadenceTasks,
+    campaigns,
+    comments,
+  ] = await Promise.all([
     prisma.auditEvent.findMany({
       where: { entityType: "lead", entityId: lead.id },
       orderBy: { createdAt: "desc" },
@@ -78,7 +119,13 @@ export default async function LeadDetailPage({
     prisma.product.findMany({
       where: { active: true },
       orderBy: [{ line: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, line: true, listPrice: true },
+      select: {
+        id: true,
+        name: true,
+        line: true,
+        listPrice: true,
+        imageUrl: true,
+      },
     }),
     prisma.generatedDocument.findMany({
       where: { leadId: lead.id },
@@ -118,7 +165,7 @@ export default async function LeadDetailPage({
         fromAddress: true,
         toAddress: true,
         occurredAt: true,
-        user: { select: { name: true } },
+        user: { select: { id: true, name: true } },
       },
     }),
     prisma.mailboxConnection.findUnique({
@@ -143,6 +190,37 @@ export default async function LeadDetailPage({
       orderBy: [{ situation: "asc" }, { label: "asc" }],
       select: { id: true, situation: true, label: true },
     }),
+    prisma.task.findMany({
+      where: {
+        leadId: lead.id,
+        cadenceKey: "LEAD_FOLLOWUP",
+        status: "OPEN",
+      },
+      orderBy: { cadenceStep: "asc" },
+      select: {
+        id: true,
+        title: true,
+        status: true,
+        dueAt: true,
+        cadenceStep: true,
+      },
+    }),
+    prisma.campaign.findMany({
+      where: { status: { in: ["PLANNED", "ACTIVE", "PAUSED"] } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.leadComment.findMany({
+      where: { leadId: lead.id },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+      select: {
+        id: true,
+        body: true,
+        createdAt: true,
+        author: { select: { id: true, name: true } },
+      },
+    }),
   ]);
 
   const timeline = buildActivity({
@@ -158,6 +236,14 @@ export default async function LeadDetailPage({
   const lastContact = timeline.find((i) =>
     ["call", "email", "visit", "note"].includes(i.kind)
   );
+  const openDeal =
+    lead.deals.find((deal) => !["WON", "LOST"].includes(deal.stage)) ?? null;
+  const wonDeals = lead.deals.filter((deal) => deal.stage === "WON");
+  const enrichedAtLabel = lead.profileEnrichedAt
+    ? lead.profileEnrichedAt.toLocaleString("nl-BE")
+    : null;
+  const websiteHref = safeExternalHref(lead.website);
+  const mapsHref = safeExternalHref(lead.mapsUrl);
 
   return (
     <div className="space-y-6 anim-lock">
@@ -165,7 +251,7 @@ export default async function LeadDetailPage({
         <div>
           <p className="label">
             <Link href="/" className="hover:text-[var(--accent)]">
-              Mijn leads
+              Vandaag
             </Link>
             {" · "}
             <Link href="/leads" className="hover:text-[var(--accent)]">
@@ -180,7 +266,7 @@ export default async function LeadDetailPage({
             <p className="text-sm mt-1">
               {lead.owner.id === user.id ? (
                 <span className="text-[var(--accent)]">
-                  Deze lead staat op <strong>jouw</strong> naam
+                  Deze lead staat op <strong>uw</strong> naam
                 </span>
               ) : (
                 <span className="text-[var(--text-dim)]">
@@ -190,7 +276,7 @@ export default async function LeadDetailPage({
             </p>
           )}
         </div>
-        <div className="text-right space-y-2">
+        <div className="text-right space-y-1">
           <div className="score text-3xl">{lead.score}</div>
           <div>
             <span className="badge">{statusLabel(lead.status)}</span>
@@ -198,24 +284,41 @@ export default async function LeadDetailPage({
               <span className="badge badge-live ml-2">Heeft automaat</span>
             )}
           </div>
-          <OwnerButton
-            leadId={lead.id}
-            ownerId={lead.ownerId}
-            ownerName={lead.owner?.name ?? null}
-            currentUserId={user.id}
-            isAdmin={user.role === "admin"}
-            takeAction={takeLead}
-            releaseAction={releaseLead}
-          />
-          <TriageButtons
-            leadId={lead.id}
-            status={lead.status}
-            complianceStatus={lead.complianceStatus}
-            contactAction={contactLead}
-            skipAction={skipLead}
-            unskipAction={unskipLead}
-          />
         </div>
+      </div>
+
+      <div className="lead-action-strip sticky top-0 z-20 -mx-4 px-4 py-2 border-b border-[var(--border)] bg-[var(--bg)]/95 backdrop-blur-sm flex flex-wrap items-center gap-2">
+        <OwnerButton
+          leadId={lead.id}
+          ownerId={lead.ownerId}
+          ownerName={lead.owner?.name ?? null}
+          currentUserId={user.id}
+          isAdmin={user.role === "admin"}
+          takeAction={takeLead}
+          releaseAction={releaseLead}
+        />
+        <TriageButtons
+          leadId={lead.id}
+          status={lead.status}
+          complianceStatus={lead.complianceStatus}
+          contactAction={contactLead}
+          skipAction={skipLead}
+          unskipAction={unskipLead}
+        />
+        <a href="#mail" className="btn btn-sm">
+          Mail
+        </a>
+        <a href="#documenten" className="btn btn-sm">
+          Document
+        </a>
+        <a href="#teamchat" className="btn btn-sm">
+          Teamchat
+        </a>
+        {user.role !== "reviewer" && !lead.customer ? (
+          <Link href={`/shop/nieuw?leadId=${lead.id}`} className="btn btn-sm">
+            Naar shop-huurder
+          </Link>
+        ) : null}
       </div>
 
       <section className="panel p-4">
@@ -260,28 +363,238 @@ export default async function LeadDetailPage({
         </div>
       </section>
 
+      <NegotiationStrip
+        completed={{
+          proposal: Boolean(lead.outreachPrep),
+          deal: Boolean(openDeal),
+          document: documents.length > 0,
+          mail:
+            drafts.length > 0 ||
+            mail.some((message) => message.direction === "OUT"),
+        }}
+      />
+
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="panel p-4 lg:col-span-2 space-y-4">
           <h2 className="label text-[var(--accent)]">Bedrijf & aanpak</h2>
-          <Info
-            label="Onderneming / vestiging"
-            value={[lead.intelligenceEnterpriseId, lead.intelligenceEstablishmentId]
-              .filter(Boolean)
-              .join(" / ")}
-          />
-          <Info label="Telefoon" value={lead.phone} />
-          <Info label="E-mail" value={lead.email} />
-          <Info label="Website" value={lead.website} />
-          <Info label="Aanbevolen automaat" value={lead.recommendedMachine} />
-          <Info label="Invalshoek" value={lead.recommendedAngle} />
-          <Info label="Openingszin" value={lead.phoneOpener} />
-          <Info label="Verwacht bezwaar" value={lead.likelyObjection} />
-          <Info label="Onderbouwing" value={lead.evidenceSummary} />
-          <Info label="Bestaande automaat" value={lead.vendingDetail} />
+          {user.role !== "reviewer" &&
+          (user.role === "admin" || !lead.ownerId || lead.ownerId === user.id) ? (
+            <LeadProfileEnrichPanel
+              leadId={lead.id}
+              enrichedAtLabel={enrichedAtLabel}
+            />
+          ) : null}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Info
+              label="Sector"
+              value={lead.category ? categoryLabel(lead.category) : null}
+            />
+            <Info
+              label="Bron"
+              value={[
+                sourceLabel(lead.source),
+                enrichedAtLabel ? `verrijkt ${enrichedAtLabel}` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+            <Info
+              className="sm:col-span-2"
+              label="Onderneming / vestiging"
+              value={[
+                lead.enterpriseName,
+                lead.establishmentName,
+                lead.intelligenceEnterpriseId,
+                lead.intelligenceEstablishmentId,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            />
+            <Info
+              label="Telefoon"
+              value={
+                lead.phone ? (
+                  <a
+                    className="text-[var(--accent)] hover:underline"
+                    href={`tel:${lead.phone}`}
+                  >
+                    {lead.phone}
+                  </a>
+                ) : null
+              }
+            />
+            <Info
+              label="E-mail"
+              value={
+                lead.email ? (
+                  <a
+                    className="text-[var(--accent)] hover:underline"
+                    href={`mailto:${lead.email}`}
+                  >
+                    {lead.email}
+                  </a>
+                ) : null
+              }
+            />
+            <Info
+              label="Website"
+              value={
+                lead.website ? (
+                  websiteHref ? (
+                    <a
+                      className="text-[var(--accent)] hover:underline break-all"
+                      href={websiteHref}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {lead.website}
+                    </a>
+                  ) : (
+                    lead.website
+                  )
+                ) : null
+              }
+            />
+            <Info
+              label="Kaart"
+              value={
+                mapsHref ? (
+                  <a
+                    className="text-[var(--accent)] hover:underline"
+                    href={mapsHref}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open locatie
+                  </a>
+                ) : null
+              }
+            />
+            <Info
+              label="Beoordelingen"
+              value={
+                lead.rating != null
+                  ? `${lead.rating.toLocaleString("nl-BE", {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    })}/5 · ${lead.reviewCount} beoordelingen`
+                  : lead.reviewCount > 0
+                    ? `${lead.reviewCount} beoordelingen`
+                    : null
+              }
+            />
+            <Info
+              label="Bedrijfsstatus"
+              value={businessStatusLabel(lead.businessStatus)}
+            />
+            <Info
+              className="sm:col-span-2"
+              label="Openingsuren"
+              value={lead.openingHours}
+            />
+            <Info
+              className="sm:col-span-2"
+              label="Bedrijfssamenvatting"
+              value={lead.evidenceSummary}
+            />
+          </div>
+          <div className="pt-4 border-t border-[var(--border)] space-y-4">
+            <h3 className="label">Verkoopaanpak</h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Info label="Aanbevolen automaat" value={lead.recommendedMachine} />
+              <Info label="Bestaande automaat" value={lead.vendingDetail} />
+              <Info
+                className="sm:col-span-2"
+                label="Invalshoek"
+                value={lead.recommendedAngle}
+              />
+            </div>
+            {(lead.phoneOpener ||
+              lead.likelyObjection ||
+              lead.discoveryQuestions ||
+              lead.outreachPrep) && (
+              <details className="pt-2">
+                <summary className="text-sm text-[var(--text-dim)] cursor-pointer">
+                  Pitch & prep (optioneel)
+                </summary>
+                <div className="grid gap-4 sm:grid-cols-2 mt-3">
+                  <Info
+                    className="sm:col-span-2"
+                    label="Openingszin"
+                    value={lead.phoneOpener}
+                  />
+                  <Info
+                    className="sm:col-span-2"
+                    label="Verwacht bezwaar"
+                    value={lead.likelyObjection}
+                  />
+                  <Info
+                    className="sm:col-span-2"
+                    label="Discovery-vragen"
+                    value={lead.discoveryQuestions}
+                  />
+                  <Info
+                    className="sm:col-span-2"
+                    label="Assistent-prep"
+                    value={lead.outreachPrep}
+                  />
+                </div>
+              </details>
+            )}
+            {lead.lossReason ? (
+              <Info
+                className="sm:col-span-2"
+                label="Stop-/verliesreden"
+                value={lossReasonLabel(lead.lossReason)}
+              />
+            ) : null}
+          </div>
+          {user.role !== "reviewer" && campaigns.length ? (
+            <form action={assignLeadCampaign} className="pt-3 border-t border-[var(--border)]">
+              <input type="hidden" name="leadId" value={lead.id} />
+              <label className="label block mb-1">Campagnebron</label>
+              <div className="flex gap-2">
+                <select
+                  name="campaignId"
+                  className="select"
+                  defaultValue={lead.campaignId ?? ""}
+                >
+                  <option value="">Geen campagne</option>
+                  {campaigns.map((campaign) => (
+                    <option key={campaign.id} value={campaign.id}>
+                      {campaign.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" className="btn btn-sm">
+                  Bewaar
+                </button>
+              </div>
+            </form>
+          ) : null}
         </section>
 
         <div className="space-y-4">
+          <CadencePanel cadenceKey="LEAD_FOLLOWUP" tasks={cadenceTasks} />
           <ContactLogPanel leadId={lead.id} />
+          <StopLeadPanel leadId={lead.id} />
+
+          {user.role !== "reviewer" ? (
+            <div id="voorstel">
+              <AiosAssistPanel leadId={lead.id} />
+            </div>
+          ) : null}
+
+          {user.role !== "reviewer" ? (
+            <details>
+              <summary className="text-sm text-[var(--text-dim)] cursor-pointer panel p-3">
+                Productadvies
+              </summary>
+              <div className="mt-2">
+                <ProductAdvisor category={lead.category} />
+              </div>
+            </details>
+          ) : null}
 
           <section className="panel p-4 space-y-3">
             <h2 className="label text-[var(--accent)]">Taak toevoegen</h2>
@@ -295,12 +608,25 @@ export default async function LeadDetailPage({
             </form>
           </section>
 
+          {user.role !== "reviewer" ? (
+            <DealPanel
+              lead={{
+                id: lead.id,
+                name: lead.name,
+                address: lead.address,
+                city: lead.city,
+              }}
+              deal={openDeal}
+              products={products}
+            />
+          ) : null}
+
           <section className="panel p-4 space-y-3">
             <h2 className="label text-[var(--accent)]">Verkocht</h2>
 
-            {lead.deals.length > 0 ? (
+            {wonDeals.length > 0 ? (
               <ul className="space-y-2 text-sm">
-                {lead.deals.map((deal) => (
+                {wonDeals.map((deal) => (
                   <li
                     key={deal.id}
                     className="border-b border-[var(--border)] pb-2 last:border-0"
@@ -323,33 +649,9 @@ export default async function LeadDetailPage({
                 Nog niets verkocht aan deze zaak.
               </p>
             )}
-
-            <form action={markLeadWon} className="space-y-2">
-              <input type="hidden" name="leadId" value={lead.id} />
-              <input
-                name="title"
-                className="input"
-                placeholder="Wat is er verkocht (optioneel)"
-                maxLength={200}
-              />
-              <input
-                name="value"
-                type="number"
-                min="0"
-                step="1"
-                className="input"
-                placeholder="Bedrag in €"
-                required
-              />
-              <button className="btn btn-primary w-full">Verkoop noteren</button>
-              <p className="text-xs text-[var(--text-dim)]">
-                Maakt een klant en een verkoop op jouw naam. Telt mee voor je
-                commissie.
-              </p>
-            </form>
           </section>
 
-          <section className="panel p-4 space-y-3">
+          <section className="panel p-4 space-y-3" id="mail">
             <div className="flex items-center justify-between gap-2">
               <h2 className="label text-[var(--accent)]">Mail</h2>
               {mailbox && <ReplySyncButton />}
@@ -362,9 +664,48 @@ export default async function LeadDetailPage({
               drafts={drafts}
               snippets={snippets}
             />
+            {mail.some(
+              (message) =>
+                message.direction === "OUT" &&
+                (user.role === "admin" || message.user?.id === user.id)
+            ) ? (
+              <details>
+                <summary className="text-xs text-[var(--text-dim)] cursor-pointer">
+                  Verzonden mail als stijlvoorbeeld bewaren
+                </summary>
+                <ul className="space-y-2 mt-2">
+                  {mail
+                    .filter(
+                      (message) =>
+                        message.direction === "OUT" &&
+                        (user.role === "admin" || message.user?.id === user.id)
+                    )
+                    .slice(0, 5)
+                    .map((message) => (
+                      <li
+                        key={message.id}
+                        className="flex items-center justify-between gap-2 text-sm"
+                      >
+                        <span className="truncate">{message.subject}</span>
+                        <form action={saveMailAsExample}>
+                          <input
+                            type="hidden"
+                            name="mailMessageId"
+                            value={message.id}
+                          />
+                          <input type="hidden" name="leadId" value={lead.id} />
+                          <button type="submit" className="btn btn-sm">
+                            Bewaar
+                          </button>
+                        </form>
+                      </li>
+                    ))}
+                </ul>
+              </details>
+            ) : null}
           </section>
 
-          <section className="panel p-4 space-y-3">
+          <section className="panel p-4 space-y-3" id="documenten">
             <h2 className="label text-[var(--accent)]">Documenten</h2>
 
             {documents.length > 0 && (
@@ -391,40 +732,67 @@ export default async function LeadDetailPage({
               </ul>
             )}
 
-            <ContractForm leadId={lead.id} products={products} />
+            <ContractForm
+              leadId={lead.id}
+              dealId={openDeal?.id}
+              products={products}
+              lead={{
+                name: lead.name,
+                address: lead.address,
+                city: lead.city,
+                province: lead.province,
+                phone: lead.phone,
+              }}
+            />
           </section>
 
           <section className="panel p-4 space-y-3">
-            <h2 className="label text-[var(--accent)]">Toestemming</h2>
-            <p className="text-sm">
-              <span className="badge">
+            <details>
+              <summary className="label text-[var(--accent)] cursor-pointer">
+                Toestemming ·{" "}
                 {COMPLIANCE_LABELS[lead.complianceStatus] ?? lead.complianceStatus}
-              </span>
-              {lead.doNotContact && <span className="badge ml-2">DNC</span>}
-            </p>
-            {lead.suppressionReason && (
-              <p className="text-sm text-[var(--warn)]">{lead.suppressionReason}</p>
-            )}
-            <form action={setLeadCompliance} className="space-y-2">
-              <input type="hidden" name="leadId" value={lead.id} />
-              <select
-                name="complianceStatus"
-                className="select"
-                defaultValue={lead.complianceStatus}
-              >
-                <option value="PENDING">Nog te beslissen</option>
-                <option value="CLEARED">Goedgekeurd</option>
-                <option value="BLOCKED">Geblokkeerd</option>
-              </select>
-              <input
-                name="suppressionReason"
-                className="input"
-                placeholder="Reden bij blokkeren"
-              />
-              <button className="btn btn-primary w-full">Opslaan</button>
-            </form>
+                {lead.doNotContact ? " · DNC" : ""}
+              </summary>
+              <div className="space-y-2 mt-3">
+                {lead.suppressionReason && (
+                  <p className="text-sm text-[var(--warn)]">{lead.suppressionReason}</p>
+                )}
+                <form action={setLeadCompliance} className="space-y-2">
+                  <input type="hidden" name="leadId" value={lead.id} />
+                  <select
+                    name="complianceStatus"
+                    className="select"
+                    defaultValue={lead.complianceStatus}
+                  >
+                    <option value="PENDING">Nog te beslissen</option>
+                    <option value="CLEARED">Goedgekeurd</option>
+                    <option value="BLOCKED">Geblokkeerd</option>
+                  </select>
+                  <input
+                    name="suppressionReason"
+                    className="input"
+                    placeholder="Reden bij blokkeren"
+                  />
+                  <button className="btn btn-primary w-full">Opslaan</button>
+                </form>
+              </div>
+            </details>
           </section>
         </div>
+      </div>
+
+      <div id="teamchat">
+        <LeadChatPanel
+          leadId={lead.id}
+          currentUserId={user.id}
+          canPost={user.role === "admin" || user.role === "sales"}
+          messages={comments.map((c) => ({
+            id: c.id,
+            body: c.body,
+            createdAt: c.createdAt.toISOString(),
+            author: c.author,
+          }))}
+        />
       </div>
 
       <section className="panel p-4">
@@ -486,13 +854,46 @@ function OverviewStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Info({ label, value }: { label: string; value?: string | null }) {
+function Info({
+  className,
+  label,
+  value,
+}: {
+  className?: string;
+  label: string;
+  value?: ReactNode;
+}) {
+  const display = value === null || value === undefined || value === "" ? "—" : value;
   return (
-    <div>
+    <div className={className}>
       <div className="label">{label}</div>
       <p className="text-sm mt-1 text-[var(--text-dim)] whitespace-pre-wrap">
-        {value || "—"}
+        {display}
       </p>
     </div>
   );
+}
+
+function sourceLabel(source: string): string {
+  if (source === "places") return "Google Places";
+  if (source === "openstreetmap") return "OpenStreetMap";
+  return source;
+}
+
+function businessStatusLabel(status?: string | null): string | null {
+  if (!status) return null;
+  if (status === "OPERATIONAL") return "Actief volgens Google";
+  if (status === "CLOSED_TEMPORARILY") return "Tijdelijk gesloten volgens Google";
+  if (status === "CLOSED_PERMANENTLY") return "Permanent gesloten volgens Google";
+  return status;
+}
+
+function safeExternalHref(value?: string | null): string | null {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }

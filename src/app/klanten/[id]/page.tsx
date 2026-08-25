@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
 import { euro } from "@/lib/team-stats";
@@ -26,6 +26,13 @@ export const dynamic = "force-dynamic";
 
 /** Eén kleur per soort gebeurtenis — zelfde palet als de leadfiche. */
 const TIMELINE_COLOURS: Record<string, string> = {
+  call: "var(--accent)",
+  email: "var(--ok)",
+  visit: "var(--caution)",
+  note: "var(--text-dim)",
+  mail: "var(--text-dim)",
+  sent: "var(--ok)",
+  reply: "var(--accent)",
   document: "var(--caution)",
   task: "var(--accent)",
   lead: "var(--border)",
@@ -77,13 +84,23 @@ export default async function KlantDetailPage({
     },
   });
   if (!customer) notFound();
+  if (customer.kind === "SHOP_TENANT") redirect(`/shop/${customer.id}`);
 
   const entityIds = [
     ...customer.contacts.map((c) => c.id),
     ...customer.machinePlacements.map((m) => m.id),
+    ...customer.deals.map((deal) => deal.id),
   ];
 
-  const [products, audits, otherTemplates] = await Promise.all([
+  const [
+    products,
+    audits,
+    otherTemplates,
+    leadHistory,
+    leadAudits,
+    openTasks,
+  ] =
+    await Promise.all([
     prisma.product.findMany({
       where: { active: true },
       orderBy: [{ line: "asc" }, { name: "asc" }],
@@ -102,6 +119,71 @@ export default async function KlantDetailPage({
       orderBy: { name: "asc" },
       select: { code: true, name: true, body: true },
     }),
+    customer.leadId
+      ? prisma.lead.findUnique({
+          where: { id: customer.leadId },
+          select: {
+            outreach: {
+              orderBy: { createdAt: "desc" },
+              include: { createdBy: { select: { name: true } } },
+            },
+            emailDrafts: {
+              orderBy: { createdAt: "desc" },
+              select: {
+                id: true,
+                subject: true,
+                body: true,
+                status: true,
+                createdAt: true,
+                createdBy: { select: { name: true } },
+              },
+            },
+            mail: {
+              orderBy: { occurredAt: "desc" },
+              select: {
+                id: true,
+                direction: true,
+                subject: true,
+                body: true,
+                fromAddress: true,
+                toAddress: true,
+                occurredAt: true,
+                user: { select: { name: true } },
+              },
+            },
+            documents: {
+              orderBy: { createdAt: "desc" },
+              select: {
+                id: true,
+                number: true,
+                title: true,
+                status: true,
+                createdAt: true,
+                signerName: true,
+              },
+            },
+          },
+        })
+      : Promise.resolve(null),
+    customer.leadId
+      ? prisma.auditEvent.findMany({
+          where: { entityType: "lead", entityId: customer.leadId },
+          orderBy: { createdAt: "desc" },
+          take: 50,
+          include: { actor: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+    prisma.task.findMany({
+      where: { customerId: customer.id, status: "OPEN" },
+      orderBy: [{ dueAt: "asc" }, { priority: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        dueAt: true,
+        cadenceKey: true,
+        cadenceStep: true,
+      },
+    }),
   ]);
 
   const genericTemplates = otherTemplates.map((t) => ({
@@ -117,11 +199,19 @@ export default async function KlantDetailPage({
     klant_email: customer.email ?? "",
   };
 
+  const allDocuments = [
+    ...customer.documents,
+    ...(leadHistory?.documents ?? []),
+  ].filter(
+    (document, index, documents) =>
+      documents.findIndex((candidate) => candidate.id === document.id) === index
+  );
   const timeline = buildActivity({
-    outreach: [],
-    drafts: [],
-    documents: customer.documents,
-    audits,
+    outreach: leadHistory?.outreach ?? [],
+    drafts: leadHistory?.emailDrafts ?? [],
+    documents: allDocuments,
+    audits: [...audits, ...leadAudits],
+    mail: leadHistory?.mail ?? [],
     tasks: customer.tasks,
   });
   const counts = activityCounts(timeline);
@@ -272,6 +362,30 @@ export default async function KlantDetailPage({
 
         <div className="space-y-4">
           <section className="panel p-4 space-y-3">
+            <h2 className="label text-[var(--accent)]">Open taken</h2>
+            {openTasks.length ? (
+              <ul className="space-y-2 text-sm">
+                {openTasks.map((task) => (
+                  <li
+                    key={task.id}
+                    className="border-b border-[var(--border)] pb-2 last:border-0"
+                  >
+                    <span className="font-medium">{task.title}</span>
+                    <span className="block text-xs text-[var(--text-dim)]">
+                      {task.dueAt?.toLocaleDateString("nl-BE") ?? "Zonder datum"}
+                      {task.cadenceKey
+                        ? ` · ${task.cadenceKey} stap ${task.cadenceStep ?? "?"}`
+                        : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-[var(--text-dim)]">Geen open taken.</p>
+            )}
+          </section>
+
+          <section className="panel p-4 space-y-3">
             <h2 className="label text-[var(--accent)]">Taak toevoegen</h2>
             <form action={createTask} className="space-y-2">
               <input type="hidden" name="customerId" value={customer.id} />
@@ -349,14 +463,16 @@ export default async function KlantDetailPage({
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
           <h2 className="label text-[var(--accent)]">Geschiedenis</h2>
           <p className="text-xs text-[var(--text-dim)]">
-            {counts.document} {counts.document === 1 ? "document" : "documenten"} · {counts.task}{" "}
-            {counts.task === 1 ? "taak afgerond" : "taken afgerond"}
+            {counts.call} {counts.call === 1 ? "gesprek" : "gesprekken"} ·{" "}
+            {counts.sent} {counts.sent === 1 ? "mail" : "mails"} ·{" "}
+            {counts.document} {counts.document === 1 ? "document" : "documenten"} ·{" "}
+            {counts.task} {counts.task === 1 ? "taak afgerond" : "taken afgerond"}
           </p>
         </div>
 
         {timeline.length === 0 ? (
           <p className="text-sm text-[var(--text-dim)]">
-            Er is nog niets gebeurd sinds deze zaak klant werd.
+            Er is nog geen activiteit op de oorspronkelijke lead of klantfiche.
           </p>
         ) : (
           <ol className="space-y-3">

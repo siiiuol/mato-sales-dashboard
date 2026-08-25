@@ -17,6 +17,7 @@ export default async function KlantenPage() {
   const user = await requirePageUser(["admin", "sales", "reviewer"]);
 
   const customers = await prisma.customer.findMany({
+    where: { kind: "BUYER" },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -37,7 +38,11 @@ export default async function KlantenPage() {
         <p className="label">Klanten</p>
         <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Wie al bij MATO koopt</h1>
         <p className="text-sm text-[var(--text-dim)] mt-1">
-          Elke gewonnen lead staat hier, met wat er verder gebeurde.
+          Verkoopklanten (gewonnen leads). Huurders in de shop staan onder{" "}
+          <Link href="/shop" className="text-[var(--accent)] underline">
+            Shop
+          </Link>
+          .
         </p>
       </div>
 

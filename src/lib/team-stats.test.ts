@@ -4,6 +4,8 @@ import {
   bucketByDay,
   commissionForDeal,
   commissionForDeals,
+  commissionForRentals,
+  totalCommission,
   conversionRate,
   rankByRevenue,
   roi,
@@ -11,6 +13,11 @@ import {
 
 const PERCENT = { commissionType: "PERCENT", commissionValue: 5 };
 const FIXED = { commissionType: "FIXED", commissionValue: 150 };
+const LOUIS = {
+  commissionType: "PERCENT",
+  commissionValue: 8,
+  rentalCommissionFixed: 500,
+};
 
 test("percentage commission is a share of the deal", () => {
   assert.equal(commissionForDeal(PERCENT, 4000), 200);
@@ -31,6 +38,16 @@ test("commission adds up over several deals", () => {
 test("no deals means no commission", () => {
   assert.equal(commissionForDeals(PERCENT, []), 0);
   assert.equal(commissionForDeals(FIXED, []), 0);
+});
+
+test("rental commission is a fixed fee per shop contract", () => {
+  assert.equal(commissionForRentals(LOUIS, 2), 1000);
+  assert.equal(commissionForRentals(LOUIS, 0), 0);
+});
+
+test("total commission adds sale percent and rental fixed", () => {
+  // 8% van €10.000 = €800 + één huur €500
+  assert.equal(totalCommission(LOUIS, [10_000], 1), 1300);
 });
 
 test("ROI counts commission as part of the cost", () => {

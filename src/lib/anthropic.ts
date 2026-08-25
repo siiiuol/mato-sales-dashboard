@@ -48,18 +48,32 @@ export class AnthropicConfigError extends Error {}
 
 export type MailDraft = { subject: string; body: string };
 
-/** Vraagt een mail op en geeft onderwerp en tekst terug. */
-export async function draftMail({
+type JsonSchema = {
+  type: "object";
+  properties: Record<string, unknown>;
+  required: readonly string[];
+  additionalProperties: boolean;
+};
+
+/**
+ * Vraagt een gestructureerd JSON-antwoord op (zodat de UI het kan tonen/opslaan).
+ *
+ * Zelfde foutpaden als bij mail: sleutel, model, timeout — geen geheimen in
+ * de boodschap.
+ */
+export async function completeJson({
   apiKey,
   model,
   system,
   prompt,
+  schema,
 }: {
   apiKey: string;
   model: string;
   system: string;
   prompt: string;
-}): Promise<MailDraft> {
+  schema: JsonSchema;
+}): Promise<string> {
   if (!apiKey.trim()) {
     throw new AnthropicConfigError(
       "Er is nog geen Anthropic-sleutel ingesteld. Vul die in bij Instellingen."
@@ -83,7 +97,7 @@ export async function draftMail({
         system,
         messages: [{ role: "user", content: prompt }],
         output_config: {
-          format: { type: "json_schema", schema: DRAFT_SCHEMA },
+          format: { type: "json_schema", schema },
         },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -139,7 +153,17 @@ export async function draftMail({
     .join("\n")
     .trim();
   if (!content) throw new AnthropicConfigError("Anthropic gaf een leeg antwoord.");
+  return content;
+}
 
+/** Vraagt een mail op en geeft onderwerp en tekst terug. */
+export async function draftMail(args: {
+  apiKey: string;
+  model: string;
+  system: string;
+  prompt: string;
+}): Promise<MailDraft> {
+  const content = await completeJson({ ...args, schema: DRAFT_SCHEMA });
   return parseDraft(content);
 }
 

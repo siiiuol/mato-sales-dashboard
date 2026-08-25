@@ -55,6 +55,19 @@ export async function logContact(
         outcome: contactOutcomeSchema,
         note: z.string().trim().max(2000).optional(),
         callbackAt: z.string().optional(),
+        lossReason: z
+          .enum([
+            "NO_INTEREST",
+            "TIMING",
+            "PRICE",
+            "NO_FIT",
+            "COMPETITOR",
+            "UNREACHABLE",
+            "DUPLICATE",
+            "OTHER",
+          ])
+          .optional()
+          .or(z.literal("")),
       })
       .parse(formObject(formData));
 
@@ -64,6 +77,7 @@ export async function logContact(
       outcome: parsed.outcome || null,
       note: parsed.note,
       callbackAt: parsed.callbackAt,
+      lossReason: parsed.lossReason || null,
       userId: user.id,
     });
 

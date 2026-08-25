@@ -1,7 +1,8 @@
 import "server-only";
 
 import { prisma } from "./db";
-import { decryptSecret, encryptSecret } from "./secrets";
+import { decryptSecret, encryptSecret, SecretError } from "./secrets";
+import { readSettingSecret } from "./settings-secrets";
 import {
   expiryFrom,
   isExpired,
@@ -20,6 +21,8 @@ import {
  */
 
 export class MailboxError extends Error {}
+/** Tokens in de database zijn niet meer te lezen; de koppeling moet opnieuw. */
+export class MailboxSecretError extends MailboxError {}
 
 export type MsConfig = {
   clientId: string;
@@ -39,7 +42,35 @@ export async function msConfig(): Promise<MsConfig> {
       "De Microsoft-koppeling is nog niet ingesteld. Vul client-id, tenant-id en het geheim in bij Instellingen."
     );
   }
-  return { clientId, tenantId, clientSecret: decryptSecret(stored) };
+  try {
+    const clientSecret = readSettingSecret(stored);
+    if (!clientSecret) {
+      throw new MailboxError(
+        "De Microsoft-koppeling is nog niet ingesteld. Vul client-id, tenant-id en het geheim in bij Instellingen."
+      );
+    }
+    return { clientId, tenantId, clientSecret };
+  } catch (err) {
+    if (err instanceof SecretError) {
+      throw new MailboxError(
+        "Het Microsoft-clientgeheim is niet meer leesbaar. Vul het opnieuw in bij Instellingen en koppel daarna de mailbox."
+      );
+    }
+    throw err;
+  }
+}
+
+function decryptMailboxToken(stored: string): string {
+  try {
+    return decryptSecret(stored);
+  } catch (err) {
+    if (err instanceof SecretError) {
+      throw new MailboxSecretError(
+        "De mailboxkoppeling is niet meer leesbaar. Koppel de mailbox opnieuw bij Instellingen."
+      );
+    }
+    throw err;
+  }
 }
 
 /**
@@ -187,28 +218,35 @@ export async function accessTokenFor(userId: string): Promise<string> {
     );
   }
 
-  if (!isExpired(connection.expiresAt)) {
-    return decryptSecret(connection.accessToken);
+  try {
+    if (!isExpired(connection.expiresAt)) {
+      return decryptMailboxToken(connection.accessToken);
+    }
+
+    const config = await msConfig();
+    const tokens = await requestTokens(config, {
+      grant_type: "refresh_token",
+      refresh_token: decryptMailboxToken(connection.refreshToken),
+    });
+
+    await prisma.mailboxConnection.update({
+      where: { userId },
+      data: {
+        accessToken: encryptSecret(tokens.access),
+        // Microsoft stuurt niet altijd een nieuw refresh token; het oude blijft
+        // dan geldig. Overschrijven met leeg zou de koppeling verbreken.
+        ...(tokens.refresh ? { refreshToken: encryptSecret(tokens.refresh) } : {}),
+        expiresAt: tokens.expiresAt,
+      },
+    });
+
+    return tokens.access;
+  } catch (err) {
+    if (err instanceof MailboxSecretError) {
+      await prisma.mailboxConnection.deleteMany({ where: { userId } });
+    }
+    throw err;
   }
-
-  const config = await msConfig();
-  const tokens = await requestTokens(config, {
-    grant_type: "refresh_token",
-    refresh_token: decryptSecret(connection.refreshToken),
-  });
-
-  await prisma.mailboxConnection.update({
-    where: { userId },
-    data: {
-      accessToken: encryptSecret(tokens.access),
-      // Microsoft stuurt niet altijd een nieuw refresh token; het oude blijft
-      // dan geldig. Overschrijven met leeg zou de koppeling verbreken.
-      ...(tokens.refresh ? { refreshToken: encryptSecret(tokens.refresh) } : {}),
-      expiresAt: tokens.expiresAt,
-    },
-  });
-
-  return tokens.access;
 }
 
 export async function disconnectMailbox(userId: string) {

@@ -40,6 +40,8 @@ De verkoper verkoopt aan de koper:
 |---|---|---|
 | {{artikel_naam}} | {{aantal}} | {{prijs_excl}} |
 
+{{product_afbeelding}}
+
 {{artikel_omschrijving}}
 
 ## 3. Prijs

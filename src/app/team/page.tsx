@@ -4,13 +4,11 @@ import { requirePageUser } from "@/lib/dal";
 import { Avatar } from "@/components/Avatar";
 import { roleLabel } from "@/lib/constants";
 import {
-  commissionForDeals,
+  totalCommission,
   euro,
-  percent,
-  rankByRevenue,
   roi,
-  conversionRate,
 } from "@/lib/team-stats";
+import { conversionDisplay } from "@/lib/reporting";
 
 export const dynamic = "force-dynamic";
 
@@ -21,24 +19,36 @@ export default async function TeamPage() {
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
 
-  const [employees, calls, wonDeals] = await Promise.all([
+  const [employees, outreach, wonDeals, shopRentals, proposalAudits] = await Promise.all([
     prisma.user.findMany({ orderBy: [{ active: "desc" }, { name: "asc" }] }),
-    // Eén keer groeperen in plaats van per medewerker een query — anders groeit
-    // het aantal queries mee met het team.
-    prisma.outreachEvent.groupBy({
-      by: ["createdById"],
-      where: { type: "CALL", createdAt: { gte: monthStart } },
-      _count: { _all: true },
+    prisma.outreachEvent.findMany({
+      where: { createdAt: { gte: monthStart } },
+      select: { createdById: true, leadId: true, type: true },
     }),
     prisma.deal.findMany({
       where: { ownerId: { not: null }, wonAt: { gte: monthStart } },
       select: { ownerId: true, wonValue: true },
     }),
+    prisma.customer.groupBy({
+      by: ["ownerId"],
+      where: {
+        kind: "SHOP_TENANT",
+        ownerId: { not: null },
+        createdAt: { gte: monthStart },
+      },
+      _count: { _all: true },
+    }),
+    prisma.auditEvent.findMany({
+      where: {
+        createdAt: { gte: monthStart },
+        action: {
+          in: ["aios.voorstel_saved", "deal.created", "deal.updated"],
+        },
+      },
+      select: { actorId: true, entityId: true, action: true, detail: true },
+    }),
   ]);
 
-  const callsBy = new Map(
-    calls.map((row) => [row.createdById ?? "", row._count._all])
-  );
   const dealsBy = new Map<string, number[]>();
   for (const deal of wonDeals) {
     if (!deal.ownerId) continue;
@@ -46,22 +56,48 @@ export default async function TeamPage() {
     list.push(deal.wonValue ?? 0);
     dealsBy.set(deal.ownerId, list);
   }
+  const rentalsBy = new Map(
+    shopRentals.map((row) => [row.ownerId ?? "", row._count._all])
+  );
+  const proposalsBy = new Map<string, Set<string>>();
+  for (const event of proposalAudits) {
+    const detail = safeObject(event.detail);
+    if (event.action !== "aios.voorstel_saved" && detail.stage !== "PROPOSAL") {
+      continue;
+    }
+    if (!event.actorId) continue;
+    const keys = proposalsBy.get(event.actorId) ?? new Set<string>();
+    const key =
+      typeof detail.dealId === "string" ? detail.dealId : event.entityId;
+    if (!key) continue;
+    keys.add(key);
+    proposalsBy.set(event.actorId, keys);
+  }
 
   const rows = employees.map((employee) => {
     const values = dealsBy.get(employee.id) ?? [];
+    const rentals = rentalsBy.get(employee.id) ?? 0;
+    const activity = outreach.filter(
+      (event) => event.createdById === employee.id
+    );
+    const uniqueLeads = new Set(activity.map((event) => event.leadId)).size;
+    const calls = activity.filter((event) => event.type === "CALL").length;
     const revenue = values.reduce((sum, value) => sum + value, 0);
-    const commission = commissionForDeals(employee, values);
+    const commission = totalCommission(employee, values, rentals);
     return {
       employee,
-      calls: callsBy.get(employee.id) ?? 0,
+      activity: activity.length,
+      calls,
+      uniqueLeads,
+      proposals: proposalsBy.get(employee.id)?.size ?? 0,
       sales: values.length,
+      rentals,
       revenue,
       commission,
       result: roi({ revenue, cost: employee.monthlyCost, commission }),
     };
   });
 
-  const ranked = rankByRevenue(rows);
   const totals = rows.reduce(
     (acc, row) => ({
       revenue: acc.revenue + row.revenue,
@@ -105,7 +141,7 @@ export default async function TeamPage() {
       </section>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {ranked.map((row, index) => (
+        {rows.map((row) => (
           <Link
             key={row.employee.id}
             href={`/team/${row.employee.id}`}
@@ -123,21 +159,22 @@ export default async function TeamPage() {
                   {!row.employee.active && (
                     <span className="badge">Uitgeschakeld</span>
                   )}
-                  {index === 0 && row.revenue > 0 && (
-                    <span className="badge badge-live">Beste deze maand</span>
-                  )}
                 </div>
               </div>
             </div>
 
             <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
               <Stat label="Gebeld" value={String(row.calls)} />
+              <Stat label="Activiteiten" value={String(row.activity)} />
+              <Stat label="Unieke leads" value={String(row.uniqueLeads)} />
+              <Stat label="Voorstellen" value={String(row.proposals)} />
               <Stat label="Verkocht" value={String(row.sales)} />
-              <Stat label="Omzet" value={euro(row.revenue)} />
+              <Stat label="Huurcontracts" value={String(row.rentals)} />
               <Stat
-                label="Scoort"
-                value={percent(conversionRate(row.sales, row.calls))}
+                label="Conversie"
+                value={conversionDisplay(row.sales, row.uniqueLeads)}
               />
+              <Stat label="Omzet" value={euro(row.revenue)} />
             </dl>
 
             <div className="border-t border-[var(--border)] pt-3 text-xs text-[var(--text-dim)] space-y-1">
@@ -165,6 +202,11 @@ export default async function TeamPage() {
           </Link>
         ))}
       </div>
+      <p className="text-xs text-[var(--text-dim)]">
+        Conversie gebruikt unieke opgevolgde leads. Onder 10 leads tonen we
+        bewust geen percentage; activiteit is context voor coaching, geen
+        rangschikking.
+      </p>
     </div>
   );
 }
@@ -197,4 +239,16 @@ function Stat({ label, value }: { label: string; value: string }) {
       <dd className="mono mt-0.5">{value}</dd>
     </div>
   );
+}
+
+function safeObject(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    return {};
+  }
 }

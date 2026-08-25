@@ -1,5 +1,4 @@
 import { prisma } from "./db";
-import { audit } from "./dal";
 import { cancelCadence } from "./cadence-actions";
 import type { LeadStatus } from "./types";
 
@@ -57,12 +56,14 @@ export async function logContactForLead(input: {
   outcome?: ContactOutcome | null;
   note?: string | null;
   callbackAt?: string | null;
+  lossReason?: string | null;
   userId: string;
 }) {
   const { leadId, type, userId } = input;
   const note = input.note?.trim() || null;
   const callbackAt = input.callbackAt?.trim() || "";
   const outcome = input.outcome ?? null;
+  const lossReason = input.lossReason?.trim() || null;
 
   if (type !== "NOTE" && !outcome) {
     throw new Error("Kies een resultaat");
@@ -70,10 +71,18 @@ export async function logContactForLead(input: {
   if (type === "NOTE" && !note) {
     throw new Error("Schrijf een notitie");
   }
+  if (outcome === "NOT_INTERESTED" && !lossReason) {
+    throw new Error("Kies waarom deze kans stopt");
+  }
 
   const lead = await prisma.lead.findUnique({
     where: { id: leadId },
-    select: { doNotContact: true, complianceStatus: true, ownerId: true },
+    select: {
+      doNotContact: true,
+      complianceStatus: true,
+      ownerId: true,
+      status: true,
+    },
   });
   if (!lead) {
     throw new Error("Lead niet gevonden");
@@ -88,38 +97,51 @@ export async function logContactForLead(input: {
     wantsFollowUp && callbackAt
       ? new Date(callbackAt)
       : null;
-  const status = statusForContact(type, outcome);
+  const status =
+    type === "NOTE" ? (lead.status as LeadStatus) : statusForContact(type, outcome);
 
-  const event = await prisma.outreachEvent.create({
-    data: {
-      leadId,
-      type,
-      outcome,
-      note,
-      nextFollowUpAt: nextFollowUpAt ?? undefined,
-      createdById: userId,
-    },
-    select: { id: true },
-  });
+  const now = new Date();
+  const eventId = await prisma.$transaction(async (tx) => {
+    const event = await tx.outreachEvent.create({
+      data: {
+        leadId,
+        type,
+        outcome,
+        note,
+        nextFollowUpAt: nextFollowUpAt ?? undefined,
+        createdById: userId,
+      },
+      select: { id: true },
+    });
 
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      status,
-      nextActionAt:
-        nextFollowUpAt ??
-        (status === "FOLLOW_UP" ? new Date(Date.now() + 86400000) : null),
-      lastTouchedAt: new Date(),
-      claimedById: null,
-      claimedAt: null,
-      ownerId: lead.ownerId ?? userId,
-      ...(lead.ownerId ? {} : { ownedAt: new Date() }),
-    },
-  });
+    await tx.lead.update({
+      where: { id: leadId },
+      data: {
+        status,
+        nextActionAt:
+          nextFollowUpAt ??
+          (status === "FOLLOW_UP" ? new Date(now.getTime() + 86400000) : null),
+        lastTouchedAt: now,
+        claimedById: null,
+        claimedAt: null,
+        ownerId: lead.ownerId ?? userId,
+        ...(lead.ownerId ? {} : { ownedAt: now }),
+        lossReason: status === "LOST" ? lossReason : null,
+        parkedUntil: null,
+      },
+    });
 
-  await audit(userId, "contact.logged", "lead", leadId, {
-    type,
-    outcome,
+    await tx.auditEvent.create({
+      data: {
+        actorId: userId,
+        action: "contact.logged",
+        entityType: "lead",
+        entityId: leadId,
+        detail: JSON.stringify({ type, outcome, lossReason }),
+      },
+    });
+
+    return event.id;
   });
 
   // Er is echt contact geweest — een herinnering die daarna nog afgaat is
@@ -130,7 +152,7 @@ export async function logContactForLead(input: {
 
   // Teruggegeven zodat de aanroeper het formulier kan verversen; zie
   // `ContactLogState.savedId`.
-  return event.id;
+  return eventId;
 }
 
 /** @deprecated gebruik logContactForLead */
@@ -139,6 +161,7 @@ export async function logCallForLead(input: {
   outcome: ContactOutcome;
   note?: string | null;
   callbackAt?: string | null;
+  lossReason?: string | null;
   userId: string;
 }) {
   return logContactForLead({

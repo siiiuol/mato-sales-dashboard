@@ -20,6 +20,7 @@ import { boundingBoxFilter, withinRadius } from "@/lib/geo";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
 import { requirePageUser } from "@/lib/dal";
+import { leadFocusWhere } from "@/lib/today-dashboard";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -36,6 +37,8 @@ type LeadFilters = {
   near?: string;
   /** Straal in kilometer rond `near`. */
   km?: string;
+  /** Snelle werklijst: vandaag, te laat, stil, zonder actie of triage. */
+  focus?: string;
 };
 
 /** Straalkeuzes. Meer dan 50 km is in Vlaanderen bijna een hele provincie. */
@@ -70,8 +73,10 @@ export default async function LeadsPage({
   const radiusKm = centre
     ? Math.min(200, Math.max(1, Number(sp.km) || 15))
     : 0;
+  const focusWhere = leadFocusWhere(sp.focus);
 
   const where = {
+    ...focusWhere,
     ...(sp.province ? { province: sp.province } : {}),
     ...(sp.status ? { status: sp.status as never } : {}),
     ...(sp.category ? { category: sp.category } : {}),
@@ -191,9 +196,14 @@ export default async function LeadsPage({
             Zoek per zone in Vlaanderen · {leads.length} in beeld
           </p>
         </div>
-        <Link href="/" className="btn">
-          Mijn leads
-        </Link>
+        <div className="flex gap-2">
+          <Link href="/leads/triage" className="btn btn-primary">
+            Triage-inbox
+          </Link>
+          <Link href="/" className="btn">
+            Mijn leads
+          </Link>
+        </div>
       </div>
 
       <LeadSearchPanel zones={enabledZones} />
@@ -216,8 +226,31 @@ export default async function LeadsPage({
         ))}
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {[
+          ["today", "Vandaag"],
+          ["overdue", "Te laat"],
+          ["stale", "14+ dagen stil"],
+          ["no-next", "Zonder volgende actie"],
+          ["triage", "Nog te beoordelen"],
+          ["missing-contact", "Zonder contactgegevens"],
+          ["ownerless", "Zonder eigenaar"],
+        ].map(([value, label]) => (
+          <Link
+            key={value}
+            href={hrefWith(sp, {
+              focus: sp.focus === value ? undefined : value,
+            })}
+            className={`badge ${sp.focus === value ? "badge-live" : ""}`}
+          >
+            {label}
+          </Link>
+        ))}
+      </div>
+
       <form method="get" className="panel p-4 flex flex-wrap items-end gap-3">
         {sp.status && <input type="hidden" name="status" value={sp.status} />}
+        {sp.focus && <input type="hidden" name="focus" value={sp.focus} />}
 
         <div className="grow min-w-[12rem]">
           <label className="label block mb-1">Zoek op naam</label>

@@ -7,12 +7,16 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { audit, requireUser } from "./dal";
 import { buildMailPrompt, SYSTEM_PROMPT } from "./mail-prompt";
+import { catalogPromptBlock, suggestMachineHint } from "./mato-catalog";
 import { draftMail, AnthropicConfigError } from "./anthropic";
 import { formObject, idSchema } from "./validation";
 import { accessTokenFor, disconnectMailbox, MailboxError } from "./mailbox";
 import { fetchInbox, GraphError, sendMail } from "./graph";
 import { matchReplies, normaliseAddress } from "./reply-match";
 import { enrollLeadFollowup, cancelCadence } from "./cadence-actions";
+import { readSettingSecret } from "./settings-secrets";
+import { SecretError } from "./secrets";
+import { fetchWebsiteText } from "./website-research";
 
 export type MailDraftState = {
   error?: string;
@@ -41,46 +45,6 @@ export type MailSyncState = {
 };
 
 /**
- * Haalt wat leesbare tekst van de website van de prospect.
- *
- * Best effort: een onbereikbare of trage site mag het opstellen van de mail
- * niet tegenhouden. Alleen http en https, kort wachten, en er gaat een harde
- * limiet op wat er terugkomt zodat één zware pagina niet het hele geheugen
- * opsnoept.
- *
- * De inhoud is van een derde en wordt in de opdracht uitdrukkelijk als naslag
- * gemarkeerd — zie `buildMailPrompt`.
- */
-async function fetchWebsiteText(url: string): Promise<string | null> {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
-
-    const response = await fetch(parsed.toString(), {
-      headers: { "user-agent": "MATO-Dashboard/1.0 (+lead research)" },
-      signal: AbortSignal.timeout(6000),
-      redirect: "follow",
-    });
-    if (!response.ok) return null;
-
-    const type = response.headers.get("content-type") ?? "";
-    if (!type.includes("text/html") && !type.includes("text/plain")) return null;
-
-    const html = (await response.text()).slice(0, 200_000);
-    return html
-      .replace(/<script[\s\S]*?<\/script>/gi, " ")
-      .replace(/<style[\s\S]*?<\/style>/gi, " ")
-      .replace(/<[^>]+>/g, " ")
-      .replace(/&nbsp;/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 1500);
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Stelt een mail op voor deze lead.
  *
  * Er wordt niets verstuurd. De tekst komt terug op het scherm, de medewerker
@@ -101,7 +65,7 @@ export async function generateMailDraft(
     })
     .parse(formObject(formData));
 
-  const [lead, settings, snippet] = await Promise.all([
+  const [lead, settings, snippet, products, style] = await Promise.all([
     prisma.lead.findUnique({
       where: { id: input.leadId },
       select: {
@@ -115,6 +79,7 @@ export async function generateMailDraft(
         vendingDetail: true,
         nearbyVending: true,
         sellsTakeaway: true,
+        outreachPrep: true,
         ownerId: true,
         owner: { select: { name: true } },
       },
@@ -126,6 +91,28 @@ export async function generateMailDraft(
           select: { id: true, body: true },
         })
       : Promise.resolve(null),
+    prisma.product.findMany({
+      where: { active: true },
+      orderBy: [{ line: "asc" }, { name: "asc" }],
+      select: {
+        name: true,
+        line: true,
+        listPrice: true,
+        description: true,
+      },
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: {
+        mailStyleNotes: true,
+        mailExamples: {
+          where: { approved: true },
+          orderBy: { createdAt: "desc" },
+          take: 3,
+          select: { subject: true, body: true },
+        },
+      },
+    }),
   ]);
 
   if (!lead) return { error: "Lead niet gevonden" };
@@ -144,11 +131,16 @@ export async function generateMailDraft(
     businessName: settings?.businessName || "MATO",
     websiteText,
     snippetBody: snippet?.body,
+    catalogBlock: catalogPromptBlock(products),
+    machineHint: suggestMachineHint(lead),
+    proposalText: lead.outreachPrep,
+    styleRules: style?.mailStyleNotes,
+    styleExamples: style?.mailExamples,
   });
 
   try {
     const draft = await draftMail({
-      apiKey: settings?.anthropicApiKey ?? "",
+      apiKey: readSettingSecret(settings?.anthropicApiKey),
       model: settings?.anthropicModel || "claude-opus-5",
       system: SYSTEM_PROMPT,
       prompt,
@@ -175,7 +167,9 @@ export async function generateMailDraft(
     revalidatePath(`/leads/${lead.id}`);
     return { subject: draft.subject, body: draft.body, draftId: saved.id };
   } catch (err) {
-    if (err instanceof AnthropicConfigError) return { error: err.message };
+    if (err instanceof AnthropicConfigError || err instanceof SecretError) {
+      return { error: err.message };
+    }
     throw err;
   }
 }
@@ -322,7 +316,11 @@ export async function sendMailDraft(
     await prisma.emailDraft
       .updateMany({ where: { id: draft.id, status: "SENDING" }, data: { status: "APPROVED" } })
       .catch(() => {});
-    if (err instanceof MailboxError || err instanceof GraphError) {
+    if (
+      err instanceof MailboxError ||
+      err instanceof GraphError ||
+      err instanceof SecretError
+    ) {
       return { error: err.message };
     }
     throw err;
@@ -535,7 +533,11 @@ export async function syncReplies(): Promise<MailSyncState> {
 
     return { checked: true, added, failed, truncated };
   } catch (err) {
-    if (err instanceof MailboxError || err instanceof GraphError) {
+    if (
+      err instanceof MailboxError ||
+      err instanceof GraphError ||
+      err instanceof SecretError
+    ) {
       return { error: err.message };
     }
     throw err;

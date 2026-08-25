@@ -67,6 +67,32 @@ export async function enrollCustomerOnboarding(customerId: string, assignedToId:
   });
 }
 
+export async function enrollInstallHandoff(
+  customerId: string,
+  dealId: string,
+  assignedToId: string,
+  startAt = new Date()
+) {
+  const existing = await prisma.task.findFirst({
+    where: { dealId, cadenceKey: "INSTALL_HANDOFF" },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await prisma.task.createMany({
+    data: stepsFor("INSTALL_HANDOFF", startAt).map((step) => ({
+      title: step.title,
+      customerId,
+      dealId,
+      assignedToId,
+      dueAt: step.dueAt,
+      cadenceKey: "INSTALL_HANDOFF" satisfies CadenceKey,
+      cadenceStep: step.step,
+      status: "OPEN",
+    })),
+  });
+}
+
 /**
  * Annuleert alle openstaande stappen van één cadans op één lead of klant.
  *

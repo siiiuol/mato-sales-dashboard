@@ -11,6 +11,7 @@ import {
   type OsmCandidate,
 } from "./osm";
 import { haversineKm } from "./geo";
+import { isLikelyDuplicate } from "./dedupe";
 
 export const CATEGORY_WEIGHT: Record<string, number> = {
   bakery: 34,
@@ -489,6 +490,17 @@ export async function runDetection(
         l.lat != null && l.lng != null
       )
       .map((l) => ({ lat: l.lat, lng: l.lng }));
+    const knownLeads = await prisma.lead.findMany({
+      select: {
+        id: true,
+        name: true,
+        city: true,
+        phone: true,
+        website: true,
+        lat: true,
+        lng: true,
+      },
+    });
 
     let created = 0;
     let skipped = 0;
@@ -501,6 +513,25 @@ export async function runDetection(
 
       const existing = await prisma.lead.findUnique({ where: { placeId: c.placeId } });
       if (existing) {
+        skipped++;
+        continue;
+      }
+
+      const crossSourceMatch = knownLeads.find((lead) =>
+        isLikelyDuplicate(c, lead)
+      );
+      if (crossSourceMatch) {
+        await prisma.lead.update({
+          where: { id: crossSourceMatch.id },
+          data: {
+            phone: crossSourceMatch.phone ? undefined : c.phone ?? undefined,
+            website: crossSourceMatch.website
+              ? undefined
+              : c.website ?? undefined,
+            lat: crossSourceMatch.lat == null ? c.lat ?? undefined : undefined,
+            lng: crossSourceMatch.lng == null ? c.lng ?? undefined : undefined,
+          },
+        });
         skipped++;
         continue;
       }
@@ -520,7 +551,7 @@ export async function runDetection(
         sellsTakeaway: c.sellsTakeaway,
       });
 
-      await prisma.lead.create({
+      const createdLead = await prisma.lead.create({
         data: {
           name: c.name,
           address: c.address ?? undefined,
@@ -546,7 +577,17 @@ export async function runDetection(
           // bij de eerstvolgende herberekening en zakt de score ongemerkt.
           reviewCount: c.reviewCount ?? 0,
         },
+        select: {
+          id: true,
+          name: true,
+          city: true,
+          phone: true,
+          website: true,
+          lat: true,
+          lng: true,
+        },
       });
+      knownLeads.push(createdLead);
       created++;
     }
 

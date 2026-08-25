@@ -86,19 +86,28 @@ town coverage, phone-number rate and how many businesses already have a machine.
 
 ## PostgreSQL
 
-SQLite is the zero-Docker local database. For production set `DATABASE_URL` to
-PostgreSQL and generate the equivalent schema:
+SQLite is the zero-Docker local database; `npm run db:push` is alleen voor die
+lokale ontwikkelomgeving. Gedeelde en productieomgevingen gebruiken PostgreSQL
+met `DATABASE_URL` (pooled) en `DIRECT_URL` (directe migratieverbinding):
 
 ```bash
-npm run db:postgres:schema
-npx prisma migrate dev --schema prisma/schema.postgresql.prisma --name initial
+npm run db:migrate:dev -- --name beschrijvende_wijziging
+npm run db:migrate:deploy
 ```
 
-Commit the generated migration history in a production rollout. Re-run
-`db:postgres:schema` after model changes.
+Commit altijd `prisma/migrations/` en het opnieuw gegenereerde
+`schema.postgresql.prisma`. Gebruik nooit `prisma db push` op gedeelde data.
+Dagelijkse back-ups draaien via `.github/workflows/database-backup.yml`; de
+hersteltest staat in `docs/backup-restore-runbook.md`.
 
 ## `lead-bot/`
 
 An earlier Python enrichment service, no longer wired into the app. It is left
 on disk untouched in case the Belgian enterprise-register (KBO) route is
 revisited; nothing in the app depends on it and it does not need to run.
+
+## `mato-aios/`
+
+Skill-recepten en context voor Claude Code (optioneel). De **gebruikers-UI** zit
+in MATO OS onder **Verkoop → Assistent** (`/aios`): ochtendbrief, contentideeën,
+en op elke leadfiche brief/voorstel met opslaan naar de fiche.

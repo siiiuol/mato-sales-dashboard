@@ -225,6 +225,8 @@ BTW {{klant_ondernemingsnummer}}
 
 Referentie / locatie: {{factuur_referentie}}
 
+{{product_afbeelding}}
+
 ## Factuurlijnen
 
 | Omschrijving | Bedrag |

@@ -93,14 +93,14 @@ export default async function SettingsPage({
         <SecretField
           name="placesApiKey"
           label="Google Places API-sleutel (optioneel — leeg = gratis OpenStreetMap)"
-          stored={settings.placesApiKey}
+          masked={settings.placesApiKey ? "•••••••• bewaard" : undefined}
           hint="Alleen nodig voor de betalende Google-dekking. Zoeken werkt ook zonder."
         />
 
         <SecretField
           name="anthropicApiKey"
           label="Anthropic API-sleutel (voor het opstellen van mails)"
-          stored={settings.anthropicApiKey}
+          masked={settings.anthropicApiKey ? "•••••••• bewaard" : undefined}
           hint="Staat in de database, nooit in de code. Zonder sleutel werkt de rest van de app gewoon; alleen “Mail opstellen” op de leadfiche valt weg."
         />
 
@@ -127,7 +127,9 @@ export default async function SettingsPage({
             <span className="mono text-[var(--text)]">
               {"<jouw-adres>"}/api/mail/callback
             </span>{" "}
-            zijn, anders weigert Microsoft de koppeling.
+            zijn, anders weigert Microsoft de koppeling. Werkt koppelen niet,
+            vul dan het clientgeheim opnieuw in — een gewijzigde SESSION_SECRET
+            maakt een oud bewaard geheim onleesbaar.
           </p>
 
           <div>
@@ -160,7 +162,7 @@ export default async function SettingsPage({
             name="msClientSecret"
             label="Clientgeheim"
             masked={settings.msClientSecret ? "•••••••• bewaard" : undefined}
-            hint="Versleuteld opgeslagen. Entra toont de waarde maar één keer, bij het aanmaken — vervalt hij, maak dan een nieuw geheim aan en plak dat hier."
+            hint="Versleuteld opgeslagen. Entra toont de waarde maar één keer, bij het aanmaken. Als koppelen faalt met een ontcijferfout, plak het geheim hier opnieuw — het veld toont anders nog 'bewaard' terwijl het niet meer leesbaar is."
           />
         </fieldset>
 
@@ -205,6 +207,21 @@ export default async function SettingsPage({
         </div>
 
         <div>
+          <label className="label block mb-1">Shop Diksmuide — aantal plaatsen</label>
+          <input
+            name="shopCapacity"
+            type="number"
+            min={1}
+            max={40}
+            className="input"
+            defaultValue={settings.shopCapacity ?? 8}
+          />
+          <p className="text-xs text-[var(--text-dim)] mt-1">
+            Fysieke plekken in de showroom/vastgoed. Ook aanpasbaar op de Shop-pagina.
+          </p>
+        </div>
+
+        <div>
           <label className="label block mb-1">Belscripts (JSON)</label>
           <textarea
             name="pitchTemplates"
@@ -218,6 +235,18 @@ export default async function SettingsPage({
           Instellingen opslaan
         </button>
       </form>
+
+      <section className="panel p-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="label text-[var(--accent)]">Producten</div>
+          <p className="text-sm text-[var(--text-dim)] mt-1">
+            Catalogus van matoautomaat.be — gebruikt door mail en Assistent.
+          </p>
+        </div>
+        <Link href="/settings/producten" className="btn shrink-0">
+          Bekijken
+        </Link>
+      </section>
 
       <section className="panel p-4 flex items-center justify-between gap-3">
         <div>
@@ -240,6 +269,18 @@ export default async function SettingsPage({
         </div>
         <Link href="/settings/sjablonen" className="btn shrink-0">
           Beheren
+        </Link>
+      </section>
+
+      <section className="panel p-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="label text-[var(--accent)]">Operationele controle</div>
+          <p className="text-sm text-[var(--text-dim)] mt-1">
+            Back-upstatus, CSV-export en gecontroleerde leadimport.
+          </p>
+        </div>
+        <Link href="/settings/operations" className="btn shrink-0">
+          Openen
         </Link>
       </section>
     </div>

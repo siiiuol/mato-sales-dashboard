@@ -76,12 +76,11 @@ export function decryptSecret(stored: string): string {
       decipher.update(Buffer.from(parts[3], "base64url")),
       decipher.final(),
     ]).toString("utf8");
-  } catch {
-    // Kan ook betekenen dat SESSION_SECRET veranderd is; in beide gevallen is
-    // de waarde niet meer bruikbaar en moet er opnieuw gekoppeld worden.
-    throw new SecretError(
-      "Deze waarde is niet te ontcijferen. Koppel de mailbox opnieuw."
-    );
+  } catch (err) {
+    if (err instanceof SecretError) throw err;
+    // Kan ook betekenen dat SESSION_SECRET veranderd is; de waarde is in beide
+    // gevallen onbruikbaar. De aanroeper zegt wat de gebruiker dan moet doen.
+    throw new SecretError("Deze waarde is niet te ontcijferen.");
   }
 }
 

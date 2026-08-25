@@ -34,6 +34,16 @@ test("CUSTOMER_ONBOARDING has three steps spanning a quarter", () => {
   assert.ok(steps[1].dueAt.getTime() < steps[2].dueAt.getTime());
 });
 
+test("INSTALL_HANDOFF starts immediately and follows through after a week", () => {
+  const steps = stepsFor("INSTALL_HANDOFF", start);
+  assert.equal(steps.length, 3);
+  assert.equal(steps[0].dueAt.toISOString(), start.toISOString());
+  assert.equal(
+    steps[2].dueAt.toISOString(),
+    "2026-08-25T09:00:00.000Z"
+  );
+});
+
 test("every cadence step has a non-empty Dutch title", () => {
   for (const key of Object.keys(CADENCES) as Array<keyof typeof CADENCES>) {
     for (const step of CADENCES[key]) {

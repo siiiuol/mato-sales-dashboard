@@ -18,6 +18,18 @@ export async function POST(request: Request) {
         note: z.string().trim().max(2000).optional(),
         callbackAt: z.string().optional(),
         nextLeadId: optionalId,
+        lossReason: z
+          .enum([
+            "NO_INTEREST",
+            "TIMING",
+            "PRICE",
+            "NO_FIT",
+            "COMPETITOR",
+            "UNREACHABLE",
+            "DUPLICATE",
+            "OTHER",
+          ])
+          .optional(),
       })
       .parse(formObject(formData));
 
@@ -26,6 +38,7 @@ export async function POST(request: Request) {
       outcome: parsed.outcome,
       note: parsed.note,
       callbackAt: parsed.callbackAt,
+      lossReason: parsed.lossReason,
       userId: user.id,
     });
 

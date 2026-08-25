@@ -10,10 +10,12 @@ import { audit, requireUser } from "./dal";
 import { documentAmount, priceBreakdown } from "./documents";
 import { generateDocumentFromTemplate, TemplateNotActiveError } from "./document-numbering";
 import { CONTRACT_CODE, CONTRACT_DEFAULTS } from "./contract-template";
+import { productImageMarkdown } from "./product-image";
 import { formObject, idSchema } from "./validation";
 
 const generateSchema = z.object({
   leadId: idSchema,
+  dealId: z.string().cuid().optional().or(z.literal("")),
   productId: z.string().cuid(),
   price: z.coerce.number().min(0).max(10_000_000),
   quantity: z.coerce.number().int().min(1).max(999).default(1),
@@ -68,6 +70,7 @@ export async function generateContract(formData: FormData) {
     artikel_omschrijving: [product.description, product.specs]
       .filter(Boolean)
       .join(" · "),
+    product_afbeelding: productImageMarkdown(product.name, product.imageUrl),
     aantal: String(input.quantity),
     prijs_excl: documentAmount(net),
     btw_bedrag: documentAmount(vat),
@@ -85,6 +88,7 @@ export async function generateContract(formData: FormData) {
       createdById: user.id,
       leadId: lead.id,
       customerId: lead.customer?.id ?? null,
+      dealId: input.dealId || null,
     }));
   } catch (err) {
     if (err instanceof TemplateNotActiveError) {
@@ -100,6 +104,7 @@ export async function generateContract(formData: FormData) {
     leadId: lead.id,
     product: product.name,
     total: gross,
+    dealId: input.dealId || null,
   });
 
   revalidatePath(`/leads/${lead.id}`);

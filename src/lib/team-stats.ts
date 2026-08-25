@@ -9,6 +9,8 @@ export type CommissionSettings = {
   /** PERCENT = deel van de dealwaarde · FIXED = vast bedrag per verkoop. */
   commissionType: string;
   commissionValue: number;
+  /** Vast bedrag per geslaagd shop-huurcontract. */
+  rentalCommissionFixed?: number;
 };
 
 /**
@@ -33,6 +35,32 @@ export function commissionForDeals(
   return dealValues.reduce(
     (total, value) => total + commissionForDeal(employee, value),
     0
+  );
+}
+
+/**
+ * Commissie voor geslaagde shop-huurcontracts.
+ *
+ * Eén bedrag per contract (`rentalCommissionFixed`), niet afhankelijk van omzet.
+ */
+export function commissionForRentals(
+  employee: CommissionSettings,
+  rentalCount: number
+): number {
+  const per = employee.rentalCommissionFixed ?? 0;
+  if (per <= 0 || rentalCount <= 0) return 0;
+  return per * rentalCount;
+}
+
+/** Verkoopcommissie + huurcommissie. */
+export function totalCommission(
+  employee: CommissionSettings,
+  dealValues: readonly number[],
+  rentalCount: number
+): number {
+  return (
+    commissionForDeals(employee, dealValues) +
+    commissionForRentals(employee, rentalCount)
   );
 }
 

@@ -8,8 +8,7 @@ export default async function CallsRedirect({
 }) {
   const params = await searchParams;
   const qs = new URLSearchParams();
-  if (params.lead) qs.set("focus", params.lead);
-  if (params.queue === "1") qs.set("queue", "1");
+  if (params.lead) qs.set("lead", params.lead);
   const suffix = qs.size ? `?${qs.toString()}` : "";
-  redirect(`/${suffix}`);
+  redirect(`/bellen${suffix}`);
 }

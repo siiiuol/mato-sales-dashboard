@@ -1,0 +1,16 @@
+# Keep Vercel uploads small
+.next
+.vercel
+node_modules
+mato-aios
+docs/mato-templates-source
+backups
+*.db
+*.db-journal
+.env*
+!.env.example
+agent-transcripts
+.claude
+.agents
+.vercel-build-local.log
+.vercel-build-cli.log

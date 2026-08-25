@@ -9,7 +9,11 @@
  * `tasks.ts` gebeurde voor die scheiding er kwam.
  */
 
-export type CadenceKey = "LEAD_FOLLOWUP" | "CUSTOMER_ONBOARDING";
+export type CadenceKey =
+  | "LEAD_FOLLOWUP"
+  | "CUSTOMER_ONBOARDING"
+  | "INSTALL_HANDOFF"
+  | "SHOP_RENEWAL";
 
 export type CadenceStepDef = {
   step: number;
@@ -30,6 +34,14 @@ export const CADENCES: Record<CadenceKey, CadenceStepDef[]> = {
     { step: 1, afterDays: 7, title: "Nazorg — eerste week: alles naar wens?" },
     { step: 2, afterDays: 30, title: "Check-in na een maand" },
     { step: 3, afterDays: 90, title: "Kwartaalcheck — vervolgkans?" },
+  ],
+  INSTALL_HANDOFF: [
+    { step: 1, afterDays: 0, title: "Bestelling en leveringsgegevens controleren" },
+    { step: 2, afterDays: 3, title: "Installatie met klant bevestigen" },
+    { step: 3, afterDays: 7, title: "Opstart en eerste gebruik opvolgen" },
+  ],
+  SHOP_RENEWAL: [
+    { step: 1, afterDays: 0, title: "Shopcontract: verlenging bespreken" },
   ],
 };
 

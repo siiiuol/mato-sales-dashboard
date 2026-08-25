@@ -2,9 +2,13 @@
   "name": "mato-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "node prisma/prepare-postgres.mjs && prisma generate --schema prisma/schema.postgresql.prisma && next build",
+    "vercel-build": "node prisma/prepare-postgres.mjs && prisma generate --schema prisma/schema.postgresql.prisma && node scripts/migrate-if-postgres.mjs && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -14,7 +18,11 @@
     "db:setup": "prisma db push && tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "db:postgres:schema": "node prisma/prepare-postgres.mjs",
-    "db:postgres:push": "node prisma/prepare-postgres.mjs && prisma db push --schema prisma/schema.postgresql.prisma"
+    "db:migrate:dev": "node prisma/prepare-postgres.mjs && prisma migrate dev --schema prisma/schema.postgresql.prisma",
+    "db:migrate:deploy": "node prisma/prepare-postgres.mjs && prisma migrate deploy --schema prisma/schema.postgresql.prisma",
+    "db:migrate:status": "node prisma/prepare-postgres.mjs && prisma migrate status --schema prisma/schema.postgresql.prisma",
+    "settings:encrypt-secrets": "tsx scripts/encrypt-settings-secrets.ts",
+    "backup": "node scripts/backup-db.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

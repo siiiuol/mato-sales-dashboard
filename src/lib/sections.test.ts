@@ -12,19 +12,32 @@ test("the reclame home selects the reclame section", () => {
 });
 
 test("a nested reclame path stays in the reclame section", () => {
-  // Anders springt de balk terug naar Verkoop zodra je een campagne opent.
   assert.equal(sectionFor("/reclame/materiaal").key, "reclame");
   assert.equal(sectionFor("/reclame/cmsir5yeh0080tyw1xktfslrr").key, "reclame");
 });
 
+test("shop section owns /shop paths", () => {
+  assert.equal(sectionFor("/shop").key, "shop");
+  assert.equal(sectionFor("/shop/nieuw").key, "shop");
+  assert.equal(sectionFor("/shop/abc").key, "shop");
+});
+
 test("verkoop is the fallback, so no path is homeless", () => {
-  for (const pad of ["/", "/leads", "/leads/abc", "/calls", "/team", "/settings", "/wat-dan-ook"]) {
+  for (const pad of [
+    "/",
+    "/leads",
+    "/leads/abc",
+    "/calls",
+    "/team",
+    "/settings",
+    "/handleiding",
+    "/wat-dan-ook",
+  ]) {
     assert.equal(sectionFor(pad).key, "verkoop", `${pad} hoort bij Verkoop`);
   }
 });
 
 test("a path that merely starts with the same letters is not the section", () => {
-  // "/reclamefolder" is geen sectiepad; alleen "/reclame" en "/reclame/…".
   assert.equal(sectionFor("/reclamefolder").key, "verkoop");
 });
 
@@ -36,26 +49,17 @@ test("only section homes match exactly", () => {
 });
 
 test("every section has a home that resolves back to itself", () => {
-  // Klik op de schakelaar en je komt in de sectie die oplicht — anders wijst de
-  // balk naar iets anders dan waar je terechtkomt.
   for (const s of SECTIONS) {
     assert.equal(sectionFor(s.home).key, s.key, `${s.label} wijst naar zichzelf`);
   }
 });
 
-test("no section link is duplicated across sections, except the deliberate shared taken-link", () => {
-  // /taken staat bewust in zowel Verkoop als Klanten: taken kunnen aan een lead
-  // óf een klant hangen, en de medewerker wil ze op één plek zien ongeacht
-  // welke sectie hij net verliet.
+test("no primary nav link is duplicated across sections", () => {
   const alle = SECTIONS.flatMap((s) => s.nav.map((n) => n.href));
-  const gedeeld = new Set(["/taken"]);
-  const zonderGedeelde = alle.filter((href) => !gedeeld.has(href));
-  assert.equal(new Set(zonderGedeelde).size, zonderGedeelde.length);
-  assert.equal(alle.filter((href) => href === "/taken").length, 2);
+  assert.equal(new Set(alle).size, alle.length);
 });
 
 test("the platform links belong to no section", () => {
-  // Team en Instellingen gelden overal; ze horen niet in één sectielijst thuis.
   const sectieLinks = new Set<string>(
     SECTIONS.flatMap((s) => s.nav.map((n) => n.href))
   );
@@ -64,10 +68,29 @@ test("the platform links belong to no section", () => {
   }
 });
 
-test("verkoop keeps its own routes, plus the shared taken-link", () => {
+test("verkoop primary nav is the four daily sales routes", () => {
   const verkoop = SECTIONS[0];
   assert.deepEqual(
     verkoop.nav.map((n) => n.href),
-    ["/", "/leads", "/taken"]
+    ["/", "/bellen", "/leads", "/deals"]
+  );
+  assert.deepEqual(
+    verkoop.more.map((n) => n.href),
+    ["/aios", "/rapporten", "/taken", "/handleiding"]
+  );
+});
+
+test("shop and klanten keep secondary routes out of the primary bar", () => {
+  assert.deepEqual(
+    SECTIONS.find((s) => s.key === "shop")?.nav.map((n) => n.href),
+    ["/shop"]
+  );
+  assert.deepEqual(
+    SECTIONS.find((s) => s.key === "klanten")?.nav.map((n) => n.href),
+    ["/klanten"]
+  );
+  assert.deepEqual(
+    SECTIONS.find((s) => s.key === "reclame")?.nav.map((n) => n.href),
+    ["/reclame"]
   );
 });

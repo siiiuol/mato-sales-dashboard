@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   isSectionHome,
   PLATFORM_ADMIN_NAV,
@@ -10,6 +10,7 @@ import {
   sectionFor,
 } from "@/lib/constants";
 import { logout } from "@/lib/auth-actions";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 type Role = "admin" | "sales" | "reviewer";
 
@@ -22,6 +23,10 @@ export function Shell({
 }) {
   const pathname = usePathname();
   const [clock, setClock] = useState("");
+  /** Open only while this matches the current path — closes on navigate without an effect. */
+  const [moreMenuPath, setMoreMenuPath] = useState<string | null>(null);
+  const moreRef = useRef<HTMLDivElement>(null);
+  const moreOpen = moreMenuPath === pathname;
 
   useEffect(() => {
     const tick = () =>
@@ -37,20 +42,31 @@ export function Shell({
     return () => window.clearInterval(id);
   }, []);
 
-  // De voorpagina van een sectie moet exact matchen, de rest op het begin van
-  // het pad. Anders blijft "Campagnes" branden op /reclame/materiaal.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!moreRef.current?.contains(event.target as Node)) {
+        setMoreMenuPath(null);
+      }
+    };
+    document.addEventListener("mousedown", onPointer);
+    return () => document.removeEventListener("mousedown", onPointer);
+  }, [moreOpen]);
+
   const isActive = (href: string) =>
     isSectionHome(href) ? pathname === href : pathname.startsWith(href);
 
   const section = sectionFor(pathname);
+  const moreItems = "more" in section ? [...section.more] : [];
 
-  const items = useMemo(
-    () =>
-      role === "admin"
-        ? [...section.nav, ...PLATFORM_ADMIN_NAV]
-        : [...section.nav],
-    [role, section]
-  );
+  const items = useMemo(() => {
+    const current = sectionFor(pathname);
+    return role === "admin"
+      ? [...current.nav, ...PLATFORM_ADMIN_NAV]
+      : [...current.nav];
+  }, [role, pathname]);
+
+  const moreActive = moreItems.some((item) => isActive(item.href));
 
   if (pathname === "/login") {
     return (
@@ -63,16 +79,12 @@ export function Shell({
   return (
     <div className="min-h-full flex flex-col">
       <header className="app-header">
-        <div className="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 shrink-0">
-            {/* Blijft naar de voorpagina wijzen: de uitweg uit een sectie. */}
+        <div className="mx-auto max-w-7xl px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-4">
             <Link href="/" className="shell-brand">
               MATO
             </Link>
-            {/* Bewust buiten het `hidden sm:flex`-blok hieronder: stond de
-                schakelaar daarin, dan kon je op een telefoon niet van sectie
-                wisselen. De klok mag wél wegvallen. */}
-            <div className="flex items-center gap-1">
+            <div className="section-switcher flex items-center gap-0.5 sm:gap-1">
               {SECTIONS.map((s) => (
                 <Link
                   key={s.key}
@@ -90,19 +102,62 @@ export function Shell({
               </span>
             </div>
           </div>
-          {/* Op een smal scherm valt de balk netjes op een tweede regel; het
-              blok is flex-wrap. Geen uitklapmenu nodig. */}
-          <nav className="flex flex-wrap items-center justify-end gap-1">
+          <nav className="flex w-full flex-wrap items-center justify-start gap-1 sm:w-auto sm:justify-end">
+            <GlobalSearch />
             {items.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="nav-link"
+                className="nav-link nav-indicator"
                 data-active={isActive(item.href)}
               >
                 {item.label}
               </Link>
             ))}
+            {moreItems.length > 0 ? (
+              <div className="relative" ref={moreRef}>
+                <button
+                  type="button"
+                  className="nav-link"
+                  data-active={moreActive || moreOpen}
+                  aria-expanded={moreOpen}
+                  aria-haspopup="menu"
+                  onClick={() =>
+                    setMoreMenuPath(moreOpen ? null : pathname)
+                  }
+                >
+                  Meer
+                </button>
+                {moreOpen ? (
+                  <div
+                    role="menu"
+                    className="nav-more-menu anim-panel absolute right-0 z-40 mt-1 min-w-[11rem] border border-[var(--border)] bg-[var(--surface)] py-1 shadow-md"
+                  >
+                    {moreItems.map((item) => (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        role="menuitem"
+                        className="block px-3 py-2 text-sm hover:bg-[var(--surface-2)]"
+                        data-active={isActive(item.href)}
+                        onClick={() => setMoreMenuPath(null)}
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <Link
+              href="/handleiding"
+              className="nav-link"
+              data-active={pathname.startsWith("/handleiding")}
+              title="Handleiding"
+              aria-label="Handleiding"
+            >
+              ?
+            </Link>
             <form action={logout}>
               <button className="nav-link" type="submit">
                 Afmelden
@@ -111,7 +166,7 @@ export function Shell({
           </nav>
         </div>
       </header>
-      <main className="flex-1 mx-auto w-full max-w-7xl px-4 py-6">{children}</main>
+      <main className="flex-1 mx-auto w-full min-w-0 max-w-7xl px-4 py-6">{children}</main>
       <footer className="border-t border-[var(--border)] py-3 px-4">
         <div className="mx-auto max-w-7xl flex justify-between gap-3 label">
           <span>MATO · Vlaanderen</span>

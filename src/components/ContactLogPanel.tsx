@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import {
   CONTACT_TYPES,
+  LOSS_REASONS,
   outcomesForType,
 } from "@/lib/constants";
 import { logContact, type ContactLogState } from "@/lib/contact-actions";
@@ -48,6 +49,7 @@ function Fields({
   pending: boolean;
 }) {
   const [type, setType] = useState<string>("CALL");
+  const [outcome, setOutcome] = useState("");
   const outcomes = outcomesForType(type);
   const needsOutcome = type !== "NOTE";
   const showFollowUp =
@@ -82,7 +84,10 @@ function Fields({
                 value={item.value}
                 className="sr-only"
                 checked={type === item.value}
-                onChange={() => setType(item.value)}
+                onChange={() => {
+                  setType(item.value);
+                  setOutcome("");
+                }}
               />
               {item.label}
             </label>
@@ -97,7 +102,8 @@ function Fields({
               name="outcome"
               className="select"
               required
-              defaultValue=""
+              value={outcome}
+              onChange={(event) => setOutcome(event.target.value)}
             >
               <option value="" disabled>
                 Kies…
@@ -110,6 +116,22 @@ function Fields({
             </select>
           </div>
         )}
+
+        {outcome === "NOT_INTERESTED" ? (
+          <div>
+            <label className="label block mb-1">Waarom stopt deze kans?</label>
+            <select name="lossReason" className="select" required defaultValue="">
+              <option value="" disabled>
+                Kies een reden…
+              </option>
+              {LOSS_REASONS.map((reason) => (
+                <option key={reason.value} value={reason.value}>
+                  {reason.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
 
         <div>
           <label className="label block mb-1">

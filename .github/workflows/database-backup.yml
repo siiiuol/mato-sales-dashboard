@@ -1,0 +1,45 @@
+name: Dagelijkse databaseback-up
+
+on:
+  schedule:
+    - cron: "15 1 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+    steps:
+      - name: Controleer configuratie
+        id: configured
+        run: |
+          if [ -n "$DATABASE_URL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::BACKUP_DATABASE_URL ontbreekt; back-up overgeslagen."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.configured.outputs.ready == 'true'
+      - uses: actions/setup-node@v4
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          node-version: 20
+          cache: npm
+      - name: Installeer back-upprogramma's
+        if: steps.configured.outputs.ready == 'true'
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client sqlite3
+      - run: npm ci
+        if: steps.configured.outputs.ready == 'true'
+      - run: npm run backup
+        if: steps.configured.outputs.ready == 'true'
+      - uses: actions/upload-artifact@v4
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          name: mato-database-backup-${{ github.run_id }}
+          path: backups/
+          retention-days: 35
+          if-no-files-found: error

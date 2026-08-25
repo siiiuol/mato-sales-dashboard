@@ -10,7 +10,7 @@ import { audit, requireUser } from "./dal";
 import { claimableWhere } from "./claims";
 import { callOutcomeSchema, formObject, idSchema } from "./validation";
 import { logCallForLead } from "./call-log";
-import { encryptSecret } from "./secrets";
+import { readSettingSecret, storeSettingSecret } from "./settings-secrets";
 import { definedOnly, nextPlainValue, nextSecretValue } from "./settings-fields";
 import { cancelCadence, enrollCustomerOnboarding } from "./cadence-actions";
 
@@ -34,7 +34,10 @@ export async function scanZone(zone: string) {
     throw new Error("Ongeldige zone");
   }
   const settings = await getSettings();
-  const result = await runDetection(prisma, zone, settings);
+  const result = await runDetection(prisma, zone, {
+    ...settings,
+    placesApiKey: readSettingSecret(settings.placesApiKey),
+  });
   revalidatePath("/");
   revalidatePath("/leads");
   return result;
@@ -336,51 +339,63 @@ export async function markLeadWon(formData: FormData) {
 
   const now = new Date();
 
-  // Opzettelijk hergebruikt in plaats van opnieuw aangemaakt: `Customer.leadId`
-  // is uniek, dus een tweede verkoop aan dezelfde zaak zou anders stuklopen.
-  const customer =
-    lead.customer ??
-    (await prisma.customer.create({
+  const { customer, deal } = await prisma.$transaction(async (tx) => {
+    // Opzettelijk hergebruikt in plaats van opnieuw aangemaakt:
+    // `Customer.leadId` is uniek, dus een tweede verkoop aan dezelfde zaak zou
+    // anders stuklopen.
+    const customer =
+      lead.customer ??
+      (await tx.customer.create({
+        data: {
+          name: lead.name,
+          address: lead.address,
+          city: lead.city,
+          province: lead.province,
+          phone: lead.phone,
+          email: lead.email,
+          website: lead.website,
+          leadId: lead.id,
+          kind: "BUYER",
+          ownerId: user.id,
+        },
+      }));
+
+    const deal = await tx.deal.create({
       data: {
-        name: lead.name,
-        address: lead.address,
-        city: lead.city,
-        province: lead.province,
-        phone: lead.phone,
-        email: lead.email,
-        website: lead.website,
+        title: input.title?.trim() || `Verkoop ${lead.name}`,
+        stage: "WON",
         leadId: lead.id,
+        customerId: customer.id,
+        ownerId: user.id,
+        wonValue: input.value,
+        wonAt: now,
+        lastActivityAt: now,
       },
-    }));
+    });
 
-  const deal = await prisma.deal.create({
-    data: {
-      title: input.title?.trim() || `Verkoop ${lead.name}`,
-      stage: "WON",
-      leadId: lead.id,
-      customerId: customer.id,
-      ownerId: user.id,
-      wonValue: input.value,
-      wonAt: now,
-      lastActivityAt: now,
-    },
-  });
+    await tx.lead.update({
+      where: { id: lead.id },
+      data: {
+        status: "WON",
+        nextActionAt: null,
+        lastTouchedAt: now,
+        claimedById: null,
+        claimedAt: null,
+        ownerId: lead.ownerId ?? user.id,
+      },
+    });
 
-  await prisma.lead.update({
-    where: { id: lead.id },
-    data: {
-      status: "WON",
-      nextActionAt: null,
-      lastTouchedAt: now,
-      claimedById: null,
-      claimedAt: null,
-      ownerId: lead.ownerId ?? user.id,
-    },
-  });
+    await tx.auditEvent.create({
+      data: {
+        actorId: user.id,
+        action: "lead.won",
+        entityType: "lead",
+        entityId: lead.id,
+        detail: JSON.stringify({ dealId: deal.id, value: input.value }),
+      },
+    });
 
-  await audit(user.id, "lead.won", "lead", lead.id, {
-    dealId: deal.id,
-    value: input.value,
+    return { customer, deal };
   });
 
   // De lead-opvolging is voorbij — dit ís de conversie waar ze op wachtte.
@@ -424,14 +439,14 @@ export async function saveSettings(formData: FormData) {
   const changes = definedOnly({
     businessName: nextPlainValue(field("businessName")) || undefined,
     // Geheimen: leeg laten betekent laten staan. Zie settings-fields.ts.
-    placesApiKey: secret("placesApiKey"),
-    anthropicApiKey: secret("anthropicApiKey"),
+    placesApiKey: storeSettingSecret(secret("placesApiKey")),
+    anthropicApiKey: storeSettingSecret(secret("anthropicApiKey")),
     anthropicModel: nextPlainValue(field("anthropicModel")) || undefined,
     msClientId: nextPlainValue(field("msClientId")),
     msTenantId: nextPlainValue(field("msTenantId")),
     // Het enige geheim dat versleuteld de database in gaat; de twee id's
     // hierboven zijn openbaar en staan sowieso in elke autorisatie-URL.
-    msClientSecret: encryptedSecret(secret("msClientSecret")),
+    msClientSecret: storeSettingSecret(secret("msClientSecret")),
     detectionCategories: categories ? JSON.stringify(categories) : undefined,
     // Alles uitvinken betekent "nergens zoeken", niet "overal zoeken". Het
     // omgekeerde schrijven zou de keuze van de beheerder vervangen door haar
@@ -440,6 +455,12 @@ export async function saveSettings(formData: FormData) {
     exclusionRadiusKm:
       radius !== null && radius !== "" ? Number(radius) : undefined,
     pitchTemplates: nextPlainValue(field("pitchTemplates")),
+    shopCapacity: (() => {
+      const raw = field("shopCapacity");
+      if (raw === null || raw === "") return undefined;
+      const n = Number(raw);
+      return Number.isInteger(n) && n >= 1 && n <= 40 ? n : undefined;
+    })(),
   });
 
   await prisma.appSettings.upsert({
@@ -451,12 +472,6 @@ export async function saveSettings(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/");
   await audit(user.id, "settings.updated", "settings", "default");
-}
-
-/** Versleutelt alleen als er iets nieuws is; laat "niet aanraken" met rust. */
-function encryptedSecret(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  return value === "" ? "" : encryptSecret(value);
 }
 
 export async function setLeadCompliance(formData: FormData) {

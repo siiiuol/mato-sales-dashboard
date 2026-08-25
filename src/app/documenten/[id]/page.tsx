@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requirePageUser } from "@/lib/dal";
 import { markDocumentSigned } from "@/lib/document-actions";
 import { idSchema } from "@/lib/validation";
+import { DocumentBody } from "@/components/DocumentBody";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +100,7 @@ export default async function DocumentPage({
 
       <section className="panel p-6 sm:p-10 doc-sheet">
         <article className="doc-body">
-          {renderMarkdown(document.body)}
+          <DocumentBody source={document.body} />
         </article>
       </section>
 
@@ -128,102 +129,4 @@ export default async function DocumentPage({
       </div>
     </div>
   );
-}
-
-/**
- * Zet de sjabloontekst om naar HTML.
- *
- * Bewust een kleine eigen omzetter en geen markdown-bibliotheek: het sjabloon
- * is van ons, gebruikt maar een handvol constructies, en alles wat er uit de
- * database in komt wordt door React als tekst weergegeven en dus niet als HTML
- * uitgevoerd.
- */
-function renderMarkdown(source: string) {
-  const blocks: React.ReactNode[] = [];
-  const lines = source.split("\n");
-  let table: string[][] = [];
-  let paragraph: string[] = [];
-
-  const flushParagraph = (key: string) => {
-    if (!paragraph.length) return;
-    blocks.push(
-      <p key={key} className="mb-3 leading-relaxed">
-        {inline(paragraph.join(" "))}
-      </p>
-    );
-    paragraph = [];
-  };
-
-  const flushTable = (key: string) => {
-    if (!table.length) return;
-    const rows = table.filter(
-      (cells) => !cells.every((c) => /^-{2,}$/.test(c.trim()) || c.trim() === "")
-    );
-    blocks.push(
-      <table key={key} className="table mb-4">
-        <tbody>
-          {rows.map((cells, rowIndex) => (
-            <tr key={rowIndex}>
-              {cells.map((cell, cellIndex) => (
-                <td key={cellIndex}>{inline(cell.trim())}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    );
-    table = [];
-  };
-
-  lines.forEach((line, index) => {
-    const key = `b${index}`;
-    if (line.trim().startsWith("|")) {
-      flushParagraph(key);
-      table.push(line.split("|").slice(1, -1));
-      return;
-    }
-    flushTable(key);
-
-    if (!line.trim()) {
-      flushParagraph(key);
-      return;
-    }
-    if (line.startsWith("## ")) {
-      flushParagraph(key);
-      blocks.push(
-        <h2 key={key} className="display text-lg font-semibold mt-6 mb-2">
-          {line.slice(3)}
-        </h2>
-      );
-      return;
-    }
-    if (line.startsWith("# ")) {
-      flushParagraph(key);
-      blocks.push(
-        <h1 key={key} className="display text-2xl font-semibold mb-4">
-          {line.slice(2)}
-        </h1>
-      );
-      return;
-    }
-    paragraph.push(line);
-  });
-
-  flushParagraph("last-p");
-  flushTable("last-t");
-  return blocks;
-}
-
-/** Alleen **vet** en *cursief*; meer heeft het sjabloon niet nodig. */
-function inline(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g).filter(Boolean);
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("*") && part.endsWith("*")) {
-      return <em key={index}>{part.slice(1, -1)}</em>;
-    }
-    return <span key={index}>{part}</span>;
-  });
 }

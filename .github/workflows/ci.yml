@@ -1,0 +1,33 @@
+name: Kwaliteitscontrole
+
+on:
+  pull_request:
+  push:
+    branches: [master, main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: file:./ci.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Controleer gegenereerd PostgreSQL-schema
+        run: |
+          npm run db:postgres:schema
+          git diff --exit-code -- prisma/schema.postgresql.prisma
+      - run: npx prisma validate
+      - name: Valideer PostgreSQL-schema
+        run: npx prisma validate --schema prisma/schema.postgresql.prisma
+        env:
+          DATABASE_URL: postgresql://mato:mato@localhost:5432/mato
+          DIRECT_URL: postgresql://mato:mato@localhost:5432/mato
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint

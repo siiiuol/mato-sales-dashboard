@@ -52,3 +52,8 @@ next-env.d.ts
 *.db
 *.db-journal
 /prisma/dev.db
+/backups/
+
+# Local AIOS workspace (not part of MATO OS deploy)
+mato-aios/
+docs/mato-templates-source/
