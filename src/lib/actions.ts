@@ -12,16 +12,20 @@ import { callOutcomeSchema, formObject, idSchema } from "./validation";
 import { logCallForLead } from "./call-log";
 import { readSettingSecret, storeSettingSecret } from "./settings-secrets";
 import { definedOnly, nextPlainValue, nextSecretValue } from "./settings-fields";
-import { cancelCadence, enrollCustomerOnboarding } from "./cadence-actions";
+import { cancelContactCadences, enrollCustomerOnboarding } from "./cadence-actions";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
 
 async function getSettings() {
-  return prisma.appSettings.upsert({
+  const settings = await prisma.appSettings.findUnique({
     where: { id: "default" },
-    update: {},
-    create: { id: "default" },
   });
+  if (!settings) {
+    throw new Error(
+      "Instellingen ontbreken in de database. Draai npm run db:seed of vul ze in via Instellingen."
+    );
+  }
+  return settings;
 }
 
 /**
@@ -279,7 +283,7 @@ export async function skipLead(leadId: string) {
   });
   // Store the previous status so a skip is restorable, not just reversible.
   await audit(user.id, "lead.skipped", "lead", id, { previousStatus: lead.status });
-  await cancelCadence({ leadId: id }, "LEAD_FOLLOWUP").catch((err) =>
+  await cancelContactCadences({ leadId: id }).catch((err) =>
     console.error("kon opvolgreeks niet annuleren", err)
   );
   revalidatePath("/leads");
@@ -401,7 +405,7 @@ export async function markLeadWon(formData: FormData) {
   // De lead-opvolging is voorbij — dit ís de conversie waar ze op wachtte.
   // De klant start zijn eigen, andersoortige ritme: nazorg, geen overtuiging.
   await Promise.all([
-    cancelCadence({ leadId: lead.id }, "LEAD_FOLLOWUP"),
+    cancelContactCadences({ leadId: lead.id }),
     enrollCustomerOnboarding(customer.id, deal.ownerId ?? user.id),
   ]).catch((err) => console.error("kon opvolgcadans niet bijwerken bij winst", err));
 
@@ -447,6 +451,7 @@ export async function saveSettings(formData: FormData) {
     // Het enige geheim dat versleuteld de database in gaat; de twee id's
     // hierboven zijn openbaar en staan sowieso in elke autorisatie-URL.
     msClientSecret: storeSettingSecret(secret("msClientSecret")),
+    unifiWebhookSecret: storeSettingSecret(secret("unifiWebhookSecret")),
     detectionCategories: categories ? JSON.stringify(categories) : undefined,
     // Alles uitvinken betekent "nergens zoeken", niet "overal zoeken". Het
     // omgekeerde schrijven zou de keuze van de beheerder vervangen door haar

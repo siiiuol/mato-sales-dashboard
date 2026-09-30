@@ -236,6 +236,44 @@ async function main() {
     }
   }
 
+  // Mailteksten: één vertrekpunt per situatie. Korte briefing voor de AI, geen
+  // kant-en-klare brief — zo blijft de uiteindelijke mail per lead geschreven.
+  // Per situatie alleen aanmaken als er nog niets staat: een tekst die iemand
+  // in de app aanpaste mag een volgende seed niet terugdraaien.
+  const starterSnippets = [
+    {
+      situation: "FIRST_OUTREACH",
+      label: "Eerste contact — zaak zonder automaat",
+      body:
+        "Kort en concreet. Noem dat we in de buurt automaten plaatsen, en wat het de zaak oplevert: " +
+        "verkopen buiten de openingsuren, zonder extra personeel. Vraag om vijf minuten aan de telefoon, " +
+        "geen verkooppraat.",
+    },
+    {
+      situation: "POST_SALE_ONBOARDING",
+      label: "Klant — eerste weken na plaatsing",
+      body:
+        "Praktisch. Herhaal wat er de eerste weken gebeurt: vullen, prijzen instellen, betaalterminal testen. " +
+        "Geef één vast aanspreekpunt met nummer, en vraag of er iets ontbreekt.",
+    },
+    {
+      situation: "POST_SALE_CHECKIN",
+      label: "Klant — check-in na enkele maanden",
+      body:
+        "Kort en zonder verkoopdruk. Vraag hoe de automaat draait, of het assortiment nog past en of er iets " +
+        "hapert. Alleen als het gesprek erom vraagt: een tweede automaat of een ander product.",
+    },
+  ];
+
+  for (const snippet of starterSnippets) {
+    const existingSnippet = await prisma.mailSnippet.findFirst({
+      where: { situation: snippet.situation },
+    });
+    if (!existingSnippet) {
+      await prisma.mailSnippet.create({ data: snippet });
+    }
+  }
+
   // No demo leads or demo deals.
   // Real queue data: KBO Open Data import + OpenStreetMap enrich/scan.
 
