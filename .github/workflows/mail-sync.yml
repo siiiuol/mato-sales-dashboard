@@ -1,0 +1,44 @@
+name: Mailsync elke 15 minuten
+
+# Draait buiten Vercel om: een Hobby-account laat maar één cron per dag toe, en
+# eens per dag ophalen betekent dat een antwoord van een prospect een dag lang
+# onopgemerkt blijft. Het eindpunt zelf is hetzelfde; alleen de aanroeper zit hier.
+#
+# GitHub plant deze taak op drukke momenten later in dan gevraagd — reken op een
+# kwartier tot soms een half uur, niet op de seconde.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      MATO_BASE_URL: ${{ secrets.MATO_BASE_URL }}
+    steps:
+      - name: Controleer configuratie
+        id: configured
+        run: |
+          if [ -n "$CRON_SECRET" ] && [ -n "$MATO_BASE_URL" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::CRON_SECRET of MATO_BASE_URL ontbreekt; mailsync overgeslagen."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Postvakken bijwerken
+        if: steps.configured.outputs.ready == 'true'
+        run: |
+          status=$(curl -sS --max-time 120 -o /tmp/mail-sync.json -w '%{http_code}' \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "$MATO_BASE_URL/api/cron/mail-sync")
+          cat /tmp/mail-sync.json
+          echo
+          if [ "$status" != "200" ]; then
+            echo "::error::Mailsync gaf HTTP $status"
+            exit 1
+          fi
