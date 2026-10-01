@@ -7,8 +7,13 @@ import {
   conversionDisplay,
   countBy,
 } from "@/lib/reporting";
-import { footfallByCamera, footfallByDay } from "@/lib/camera-events";
-import { FootfallChart } from "@/components/FootfallChart";
+import {
+  busiestHour,
+  footfallByCamera,
+  footfallByDay,
+  footfallByHour,
+} from "@/lib/camera-events";
+import { CameraPanel } from "@/components/CameraPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -167,6 +172,22 @@ export default async function ReportsPage({
   );
   const dailyFootfall = footfallByDay(cameraEvents, 14);
   const cameraRows = footfallByCamera(cameraEvents);
+  const hourlyFootfall = footfallByHour(cameraEvents);
+  const peakHour = busiestHour(hourlyFootfall);
+  // Delen door de gekozen periode zou het gemiddelde verdunnen zolang de
+  // camerakoppeling korter loopt dan die periode: 14 dagen meten en door 90
+  // delen leest als rustig terwijl het druk was. Dus delen door wat er echt
+  // gemeten is.
+  const firstCameraEvent = cameraEvents.reduce<Date | null>((earliest, event) => {
+    const moment = event.occurredAt ?? event.receivedAt;
+    return earliest == null || moment < earliest ? moment : earliest;
+  }, null);
+  const measuredDays = firstCameraEvent
+    ? Math.min(
+        days,
+        Math.max(1, Math.ceil((now.getTime() - firstCameraEvent.getTime()) / 86_400_000))
+      )
+    : days;
   const visibleUsers =
     viewer.role === "admin"
       ? users
@@ -214,18 +235,18 @@ export default async function ReportsPage({
         </nav>
       </div>
 
-      <section className="space-y-3">
+      <section className="panel p-4 sm:p-6 space-y-5">
         <h2 className="label text-[var(--accent)]">Verkoopfunnel</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-          <Figure label="Gesprekken" value={calls.length} />
-          <Figure label="Afspraken geboekt" value={meetings.length} />
-          <Figure label="Voorstellen bewaard" value={proposalKeys.size} />
-          <Figure label="Gewonnen deals" value={wonDeals.length} />
-          <Figure
+        <dl className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-x-6 gap-y-5">
+          <Stat label="Gesprekken" value={calls.length} />
+          <Stat label="Afspraken geboekt" value={meetings.length} />
+          <Stat label="Voorstellen bewaard" value={proposalKeys.size} />
+          <Stat label="Gewonnen deals" value={wonDeals.length} />
+          <Stat
             label="Gem. doorlooptijd"
             value={cycleDays == null ? "—" : `${Math.round(cycleDays)} d`}
           />
-          <Figure
+          <Stat
             label="Gem. brutomarge"
             value={
               avgMargin == null
@@ -233,7 +254,7 @@ export default async function ReportsPage({
                 : `${Math.round(avgMargin * 100)}%`
             }
           />
-        </div>
+        </dl>
         <p className="text-xs text-[var(--text-dim)]">
           Definities: gesprekken = gelogde calls; afspraken = niet-geannuleerde
           afspraken aangemaakt in de periode; voorstellen = unieke bewaarde
@@ -254,23 +275,23 @@ export default async function ReportsPage({
         <Cohort title="Zonevergelijking" rows={zoneRows} />
       </section>
 
-      <section className="space-y-3">
+      <section className="panel p-4 sm:p-6 space-y-5">
         <h2 className="label text-[var(--accent)]">Automatenshop Diksmuide</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          <Figure label="Bezetting" value={`${activeShop.length} / ${capacity}`} />
-          <Figure
+        <dl className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-x-6 gap-y-5">
+          <Stat label="Bezetting" value={`${activeShop.length} / ${capacity}`} />
+          <Stat
             label="Bezettingsgraad"
             value={`${Math.round((activeShop.length / capacity) * 100)}%`}
           />
-          <Figure label="Einde binnen 30d" value={expiring30.length} />
-          <Figure label="Einde 31–60d" value={expiring60.length} />
-          <Figure
+          <Stat label="Einde binnen 30d" value={expiring30.length} />
+          <Stat label="Einde 31–60d" value={expiring60.length} />
+          <Stat
             label="Plaatswissels"
             value={`${started.length} in · ${ended.length} uit`}
           />
-        </div>
+        </dl>
         {(expiring30.length || expiring60.length) > 0 ? (
-          <div className="panel p-4">
+          <div className="border-t border-[var(--border)] pt-4">
             <ul className="grid gap-2 sm:grid-cols-2">
               {[...expiring30, ...expiring60].map((placement) => (
                 <li key={placement.id}>
@@ -291,43 +312,26 @@ export default async function ReportsPage({
         ) : null}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="label text-[var(--accent)]">
-          Cameraverkeer Diksmuide (bèta)
-        </h2>
-        {cameraEvents.length ? (
-          <>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Figure label="Persoonsdetecties" value={cameraEvents.length} />
-              <Figure
-                label="Camera's met verkeer"
-                value={cameraRows.length}
-              />
-            </div>
-            <div className="panel p-4">
-              <p className="text-xs text-[var(--text-dim)] mb-2">
-                Laatste 14 dagen
-              </p>
-              <FootfallChart data={dailyFootfall} />
-            </div>
-            <Breakdown
-              title="Per camera"
-              rows={cameraRows.map((row) => ({
-                label: row.label,
-                value: String(row.count),
-              }))}
-              empty="Nog geen cameradata in deze periode."
-            />
-          </>
-        ) : (
-          <p className="text-sm text-[var(--text-dim)] panel p-4">
+      {cameraEvents.length ? (
+        <CameraPanel
+          total={cameraEvents.length}
+          daily={dailyFootfall}
+          hourly={hourlyFootfall}
+          perCamera={cameraRows}
+          peak={peakHour}
+          days={measuredDays}
+        />
+      ) : (
+        <section className="panel p-4 sm:p-6 space-y-2">
+          <h2 className="label text-[var(--accent)]">Cameraverkeer Diksmuide</h2>
+          <p className="text-sm text-[var(--text-dim)]">
             Nog geen cameradata. Koppel een Alarm Manager-webhook in UniFi
-            Protect (trigger: Smart Detect → Persoon) naar{" "}
+            Protect (trigger: Objects → Person) naar{" "}
             <span className="mono">/api/unifi/webhook?secret=…</span> om
             voetgangersverkeer per automaat bij te houden.
           </p>
-        )}
-      </section>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -388,11 +392,17 @@ export default async function ReportsPage({
   );
 }
 
-function Figure({ label, value }: { label: string; value: string | number }) {
+/**
+ * Eén cijfer met zijn label, zonder eigen kader.
+ *
+ * Elf losse panelen naast elkaar lazen als elf even belangrijke dingen; door ze
+ * in één kader te zetten valt de rand weg en blijft alleen het cijfer over.
+ */
+function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="panel p-4">
-      <p className="label">{label}</p>
-      <p className="display text-2xl mt-1">{value}</p>
+    <div>
+      <dt className="label">{label}</dt>
+      <dd className="display text-2xl mt-1">{value}</dd>
     </div>
   );
 }

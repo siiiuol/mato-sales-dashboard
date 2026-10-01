@@ -109,6 +109,43 @@ export function footfallByDay(
   return [...buckets.entries()].map(([date, bucket]) => ({ date, ...bucket }));
 }
 
+export type HourBucket = { hour: number; count: number };
+
+/**
+ * Verdeelt detecties over de 24 uren van de dag (Europe/Brussels).
+ *
+ * Dit is het getal waar een uitbater iets mee kan: wanneer loopt er volk langs,
+ * en dus wanneer is bijvullen zinvol. Een dagtotaal zegt dat niet.
+ */
+export function footfallByHour(
+  events: Array<{ occurredAt: Date | null; receivedAt: Date }>
+): HourBucket[] {
+  const counts = new Array<number>(24).fill(0);
+  for (const event of events) {
+    const hour = hourInBrussels(event.occurredAt ?? event.receivedAt);
+    if (hour >= 0 && hour < 24) counts[hour] += 1;
+  }
+  return counts.map((count, hour) => ({ hour, count }));
+}
+
+/** Het drukste uur, of null bij te weinig data om er iets over te zeggen. */
+export function busiestHour(buckets: HourBucket[], minimum = 20): HourBucket | null {
+  const total = buckets.reduce((sum, b) => sum + b.count, 0);
+  if (total < minimum) return null;
+  const best = buckets.reduce((a, b) => (b.count > a.count ? b : a));
+  return best.count > 0 ? best : null;
+}
+
+function hourInBrussels(date: Date): number {
+  const formatted = date.toLocaleString("nl-BE", {
+    timeZone: "Europe/Brussels",
+    hour: "2-digit",
+    hour12: false,
+  });
+  const hour = Number.parseInt(formatted, 10);
+  return Number.isFinite(hour) ? hour % 24 : -1;
+}
+
 /** Telt events per camera, aflopend gesorteerd. */
 export function footfallByCamera(
   events: Array<{ cameraName: string | null }>
