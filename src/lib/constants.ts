@@ -1,96 +1,60 @@
 /**
- * De secties van MATO OS.
- *
- * Verkoop is de terugval en heeft daarom geen voorvoegsel: alles wat geen
- * andere sectie opeist hoort daar. Dat is niet uit gemakzucht — het is de
- * eerlijke vorm. Verkoop is de app; de secties die erbij komen zijn de gasten,
- * en die dragen hun eigen voorvoegsel.
- *
- * Een derde sectie toevoegen is één object hier, één map onder `src/app`, en de
- * gebruikelijke bewaking op elke pagina. Verder niets.
+ * De vier tabs die iedereen ziet. Geen secties, geen Meer-menu: één balk,
+ * dezelfde structuur voor alle 32 mensen.
  */
-export const SECTIONS = [
-  {
-    key: "verkoop",
-    label: "Verkoop",
-    home: "/",
-    prefix: null,
-    nav: [
-      { href: "/", label: "Vandaag" },
-      { href: "/bellen", label: "Belmodus" },
-      { href: "/leads", label: "Leads" },
-      { href: "/deals", label: "Deals" },
-    ],
-    more: [
-      { href: "/aios", label: "Assistent" },
-      { href: "/rapporten", label: "Rapporten" },
-      { href: "/taken", label: "Mijn taken" },
-      { href: "/handleiding", label: "Handleiding" },
-    ],
-  },
-  {
-    key: "reclame",
-    label: "Reclame",
-    home: "/reclame",
-    prefix: "/reclame",
-    nav: [{ href: "/reclame", label: "Campagnes" }],
-    more: [
-      { href: "/reclame/content", label: "Contentkalender" },
-      { href: "/reclame/materiaal", label: "Materiaal" },
-      { href: "/handleiding", label: "Handleiding" },
-    ],
-  },
-  {
-    key: "klanten",
-    label: "Klanten",
-    home: "/klanten",
-    prefix: "/klanten",
-    nav: [{ href: "/klanten", label: "Klanten" }],
-    more: [{ href: "/handleiding", label: "Handleiding" }],
-  },
-  {
-    key: "shop",
-    label: "Shop",
-    home: "/shop",
-    prefix: "/shop",
-    nav: [{ href: "/shop", label: "Huurders" }],
-    more: [{ href: "/handleiding", label: "Handleiding" }],
-  },
+export const APP_TABS = [
+  { key: "vandaag", href: "/", label: "Vandaag" },
+  { key: "zaken", href: "/leads", label: "Zaken" },
+  { key: "documenten", href: "/klantdocumenten", label: "Documenten" },
+  { key: "shop", href: "/shop", label: "Shop" },
+] as const;
+
+export type AppTab = (typeof APP_TABS)[number];
+
+/**
+ * Achter de eigen naam, zichtbaar voor iedereen die de pagina mag openen.
+ *
+ * Rapporten hoort niet in de tabbalk — het is niets wat je de hele dag open
+ * hebt — maar stond nergens gelinkt, waardoor het alleen via de URL te vinden
+ * was. Sales en reviewer mogen het ook zien; zie `requirePageUser` daar.
+ */
+export const APP_MENU_NAV = [
+  { href: "/rapporten", label: "Rapporten" },
 ] as const;
 
 /**
- * Team en Instellingen horen bij geen enkele sectie — ze gelden voor het hele
- * platform en staan in elke sectie achteraan.
- *
- * Alleen zichtbaar voor de beheerder. De echte afscherming staat in
- * `requirePageUser` op de pagina's zelf; dit bepaalt enkel wat er in de balk
- * verschijnt.
+ * Team en Instellingen horen niet in de tabs. Alleen de beheerder ziet ze
+ * achter zijn naam. De echte afscherming staat in `requirePageUser`.
  */
 export const PLATFORM_ADMIN_NAV = [
   { href: "/team", label: "Team" },
   { href: "/settings", label: "Instellingen" },
 ] as const;
 
-const SECTION_HOMES = new Set<string>(SECTIONS.map((s) => s.home));
+const TAB_HOMES = new Set<string>(APP_TABS.map((tab) => tab.href));
 
-/** In welke sectie een pad valt. Afleiden is goedkoper dan onthouden. */
-export function sectionFor(pathname: string) {
-  return (
-    SECTIONS.find(
-      (s) => s.prefix && (pathname === s.prefix || pathname.startsWith(`${s.prefix}/`))
-    ) ?? SECTIONS[0]
-  );
+/** Welke tab bij dit pad hoort. Vandaag is de terugval. */
+export function tabFor(pathname: string): AppTab {
+  if (pathname === "/" || pathname === "") return APP_TABS[0];
+  if (pathname.startsWith("/leads")) return APP_TABS[1];
+  if (
+    pathname.startsWith("/klantdocumenten") ||
+    pathname.startsWith("/reclame")
+  ) {
+    return APP_TABS[2];
+  }
+  if (pathname.startsWith("/shop")) return APP_TABS[3];
+  return APP_TABS[0];
 }
 
-/**
- * Of een link de voorpagina van een sectie is.
- *
- * Die moet exact overeenkomen om op te lichten; de rest mag op het begin van
- * het pad matchen. Anders blijft "Campagnes" branden terwijl je op
- * /reclame/materiaal staat.
- */
-export function isSectionHome(href: string) {
-  return SECTION_HOMES.has(href);
+/** Exacte match op de tab-home, anders prefix (niet `/leads` op `/leadership`). */
+export function isTabActive(href: string, pathname: string) {
+  if (href === "/") return pathname === "/";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function isTabHome(href: string) {
+  return TAB_HOMES.has(href);
 }
 
 /** Rollen zoals ze op het scherm heten. In de database blijven ze Engels. */
