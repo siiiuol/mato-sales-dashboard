@@ -23,7 +23,13 @@ export function parseUnifiEvent(body: unknown): {
     trigger.deviceName,
     trigger.cameraName,
     record.deviceName,
-    record.cameraName
+    record.cameraName,
+    // `device` kan ook rechtstreeks de naam zijn in plaats van een object —
+    // zo komt hij binnen als de melding de naam in de query-string meestuurt.
+    trigger.device,
+    record.device,
+    trigger.camera,
+    record.camera
   );
   const cameraId = firstString(
     device.id,

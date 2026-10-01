@@ -14,8 +14,12 @@ export const dynamic = "force-dynamic";
  * 200 bij een geldig geheim, ook als het lichaam niet te ontleden is: UniFi
  * herhaalt een mislukte aflevering, en een halfverwerkte gebeurtenis is nuttiger
  * dan een eindeloze retry-lus.
+ *
+ * GET én POST, omdat niet gedocumenteerd is wat Alarm Manager verstuurt. Een
+ * 405 op de verkeerde methode kost een gebeurtenis zonder dat er iets zichtbaar
+ * misgaat: het alarm meldt gewoon "notified", want het kreeg een antwoord.
  */
-export async function POST(request: Request) {
+async function handle(request: Request) {
   const settings = await prisma.appSettings.findUnique({
     where: { id: "default" },
     select: { unifiWebhookSecret: true },
@@ -37,11 +41,13 @@ export async function POST(request: Request) {
   }
 
   const provided = new URL(request.url).searchParams.get("secret");
-  if (!provided || provided !== secret) {
+  // Trimmen vangt de spatie of nieuwe regel die bij plakken meekomt; zonder dat
+  // faalt de vergelijking op iets wat in beide velden identiek oogt.
+  if (!provided || provided.trim() !== secret.trim()) {
     return NextResponse.json({ error: "Niet toegestaan." }, { status: 401 });
   }
 
-  const raw = await request.text();
+  const raw = request.method === "GET" ? "" : await request.text();
   let json: unknown = null;
   try {
     json = raw ? JSON.parse(raw) : null;
@@ -50,16 +56,24 @@ export async function POST(request: Request) {
     // UniFi precies stuurde.
   }
 
-  const parsed = parseUnifiEvent(json);
+  // Bij een GET zit alles wat we hebben in de query-string; bewaar die als
+  // payload zodat een gebeurtenis nooit spoorloos verdwijnt.
+  const query = Object.fromEntries(new URL(request.url).searchParams.entries());
+  delete query.secret;
+
+  const parsed = parseUnifiEvent(json ?? query);
   await prisma.cameraEvent.create({
     data: {
       cameraName: parsed.cameraName,
       cameraId: parsed.cameraId,
       eventType: parsed.eventType,
       occurredAt: parsed.occurredAt,
-      raw: raw || "{}",
+      raw: raw || JSON.stringify({ method: request.method, query }),
     },
   });
 
   return NextResponse.json({ ok: true });
 }
+
+export const POST = handle;
+export const GET = handle;
