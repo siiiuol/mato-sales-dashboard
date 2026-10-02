@@ -1,7 +1,11 @@
 import "server-only";
 
 import { prisma } from "./db";
-import { stepsFor, type CadenceKey } from "./cadences";
+import {
+  CONTACT_STOP_CADENCES,
+  stepsFor,
+  type CadenceKey,
+} from "./cadences";
 
 /**
  * Inschrijven in en annuleren van een opvolgcadans.
@@ -18,10 +22,17 @@ import { stepsFor, type CadenceKey } from "./cadences";
  * Alleen als er nog geen open LEAD_FOLLOWUP-taken voor deze lead bestaan —
  * niet "ooit", want een lead die eerder een cadans doorliep (afgerond of
  * geannuleerd) mag na een nieuwe eerste mail gewoon opnieuw beginnen.
+ *
+ * Als er al een open PROPOSAL_NO_REPLY loopt, laten we die staan — dat is de
+ * scherpere reeks. Maximaal één actieve lead-opvolgreeks per zaak.
  */
 export async function enrollLeadFollowup(leadId: string, assignedToId: string) {
   const existing = await prisma.task.findFirst({
-    where: { leadId, cadenceKey: "LEAD_FOLLOWUP", status: "OPEN" },
+    where: {
+      leadId,
+      status: "OPEN",
+      cadenceKey: { in: ["LEAD_FOLLOWUP", "PROPOSAL_NO_REPLY"] },
+    },
     select: { id: true },
   });
   if (existing) return;
@@ -38,6 +49,49 @@ export async function enrollLeadFollowup(leadId: string, assignedToId: string) {
       status: "OPEN",
     })),
   });
+}
+
+/**
+ * Schrijft een lead in na het versturen van een voorstel of contract.
+ *
+ * Vervangt een open LEAD_FOLLOWUP: een voorstel is een sterker signaal dan de
+ * eerste mail, dus die reeks mag niet naast deze blijven staan.
+ */
+export async function enrollProposalNoReply(
+  leadId: string,
+  assignedToId: string,
+  dealId?: string | null
+) {
+  const existing = await prisma.task.findFirst({
+    where: { leadId, cadenceKey: "PROPOSAL_NO_REPLY", status: "OPEN" },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  await cancelCadence({ leadId }, "LEAD_FOLLOWUP");
+
+  const steps = stepsFor("PROPOSAL_NO_REPLY");
+  await prisma.task.createMany({
+    data: steps.map((s) => ({
+      title: s.title,
+      leadId,
+      dealId: dealId || null,
+      assignedToId,
+      dueAt: s.dueAt,
+      cadenceKey: "PROPOSAL_NO_REPLY" satisfies CadenceKey,
+      cadenceStep: s.step,
+      status: "OPEN",
+    })),
+  });
+}
+
+/** Stopt alle opvolgreeksen die bij echt contact stil moeten. */
+export async function cancelContactCadences(
+  entity: { leadId: string } | { customerId: string }
+) {
+  for (const key of CONTACT_STOP_CADENCES) {
+    await cancelCadence(entity, key);
+  }
 }
 
 /**
