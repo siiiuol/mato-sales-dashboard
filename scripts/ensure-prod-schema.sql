@@ -247,3 +247,6 @@ CREATE INDEX IF NOT EXISTS "CameraEvent_cameraName_occurredAt_idx" ON "CameraEve
 
 -- Geheim voor de UniFi-webhook, naast de andere sleutels in AppSettings.
 ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "unifiWebhookSecret" TEXT NOT NULL DEFAULT '';
+
+-- Deelbare livestreams per camera (naam = url, één per regel).
+ALTER TABLE "AppSettings" ADD COLUMN IF NOT EXISTS "cameraStreams" TEXT NOT NULL DEFAULT '';

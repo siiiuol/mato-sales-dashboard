@@ -452,6 +452,7 @@ export async function saveSettings(formData: FormData) {
     // hierboven zijn openbaar en staan sowieso in elke autorisatie-URL.
     msClientSecret: storeSettingSecret(secret("msClientSecret")),
     unifiWebhookSecret: storeSettingSecret(secret("unifiWebhookSecret")),
+    cameraStreams: nextPlainValue(field("cameraStreams")),
     detectionCategories: categories ? JSON.stringify(categories) : undefined,
     // Alles uitvinken betekent "nergens zoeken", niet "overal zoeken". Het
     // omgekeerde schrijven zou de keuze van de beheerder vervangen door haar

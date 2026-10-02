@@ -197,6 +197,28 @@ export default async function SettingsPage({
             masked={settings.unifiWebhookSecret ? "•••••••• bewaard" : undefined}
             hint="Vrij te kiezen, zolang het lang en willekeurig is. Zonder dit geheim weigert het eindpunt alles. Wijzig je het, pas dan ook de URL in de Alarm Manager-regel aan."
           />
+
+          <div>
+            <label className="label block mb-1" htmlFor="cameraStreams">
+              Livebeeld per camera
+            </label>
+            <textarea
+              id="cameraStreams"
+              name="cameraStreams"
+              className="input mono"
+              rows={5}
+              spellCheck={false}
+              placeholder={"Automaat 1 & 2 = https://monitor.ui.com/…\nAutomaat 3 & 4 = https://monitor.ui.com/…"}
+              defaultValue={settings.cameraStreams || ""}
+            />
+            <p className="text-xs text-[var(--text-dim)] mt-1">
+              Eén regel per camera, als <span className="mono">naam = link</span>.
+              De link maak je in UniFi Protect per camera onder{" "}
+              <span className="mono">Share Livestream</span>. Alleen adressen op{" "}
+              <span className="mono">monitor.ui.com</span> worden getoond. Let op:
+              wie zo&apos;n link heeft, kijkt mee zonder wachtwoord.
+            </p>
+          </div>
         </fieldset>
 
         <div>

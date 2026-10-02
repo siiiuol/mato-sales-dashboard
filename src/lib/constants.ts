@@ -19,6 +19,7 @@ export type AppTab = (typeof APP_TABS)[number];
  * was. Sales en reviewer mogen het ook zien; zie `requirePageUser` daar.
  */
 export const APP_MENU_NAV = [
+  { href: "/camera", label: "Camerabeeld" },
   { href: "/rapporten", label: "Rapporten" },
 ] as const;
 
