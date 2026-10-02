@@ -29,9 +29,14 @@ export function Shell({
   const accountRef = useRef<HTMLDivElement>(null);
   const accountLabel = userName?.trim() || "Account";
 
-  useEffect(() => {
+  // Het menu gaat dicht zodra je ergens naartoe navigeert. Dat gebeurt tijdens
+  // de render en niet in een effect: een setState in een effect zorgt voor een
+  // tweede render waarin het menu nog even open staat, en lint keurt het af.
+  const [menuPath, setMenuPath] = useState(pathname);
+  if (menuPath !== pathname) {
+    setMenuPath(pathname);
     setAccountOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     if (!accountOpen) return;
