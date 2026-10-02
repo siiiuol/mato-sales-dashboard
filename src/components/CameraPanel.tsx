@@ -37,7 +37,7 @@ export function CameraPanel({
       <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2">
         <p className="display text-3xl">{perDay.toLocaleString("nl-BE")}</p>
         <p className="text-sm text-[var(--text-dim)]">
-          passanten per dag, gemiddeld over {days} dagen
+          passanten per dag, gemiddeld over {days} {days === 1 ? "dag" : "dagen"}
           {peak ? (
             <>
               {" · drukst tussen "}
@@ -93,6 +93,20 @@ export function CameraPanel({
         </svg>
       </div>
 
+      {/* Zolang UniFi geen cameranaam meestuurt, valt alles in één naamloze bak.
+          Een balk van 100% "Onbekende camera" suggereert een verdeling die er
+          niet is; dan is zeggen wat eraan ontbreekt eerlijker. */}
+      {perCamera.length === 1 && perCamera[0].label === "Onbekende camera" ? (
+        <div className="space-y-2">
+          <p className="label">Per automaat</p>
+          <p className="text-sm text-[var(--text-dim)]">
+            Nog niet te splitsen: de meldingen komen binnen zonder cameranaam.
+            Geef elke camera in UniFi een eigen webhook-regel met{" "}
+            <span className="mono">&amp;camera=…</span> in de URL, dan verschijnt
+            de verdeling hier.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-2">
         <p className="label">Per automaat</p>
         <ul className="space-y-1.5">
@@ -114,6 +128,7 @@ export function CameraPanel({
           ))}
         </ul>
       </div>
+      )}
 
       <details className="group">
         <summary className="label cursor-pointer text-[var(--text-dim)] hover:text-[var(--text)]">
