@@ -12,6 +12,7 @@ import { generateDocumentFromTemplate, TemplateNotActiveError } from "./document
 import { CONTRACT_CODE, CONTRACT_DEFAULTS } from "./contract-template";
 import { productImageMarkdown } from "./product-image";
 import { formObject, idSchema } from "./validation";
+import { enrollProposalNoReply } from "./cadence-actions";
 
 const generateSchema = z.object({
   leadId: idSchema,
@@ -107,8 +108,91 @@ export async function generateContract(formData: FormData) {
     dealId: input.dealId || null,
   });
 
+  // Voorstel is buiten — vanaf hier telt "geen antwoord" zwaarder dan de
+  // gewone mail-opvolging. Mag het redirect niet laten falen.
+  await enrollProposalNoReply(
+    lead.id,
+    lead.ownerId ?? user.id,
+    input.dealId || null
+  ).catch((err) => console.error("kon niet inschrijven voor voorstel-opvolging", err));
+
+  // Prijs die de verkoper net bevestigde terugschrijven naar de dealregel,
+  // zodat deal en contract niet uit elkaar lopen.
+  if (input.dealId) {
+    await syncDealLineFromContract({
+      dealId: input.dealId,
+      productId: input.productId,
+      qty: input.quantity,
+      unitPrice: input.price,
+    }).catch((err) => console.error("kon dealregel niet bijwerken", err));
+  }
+
   revalidatePath(`/leads/${lead.id}`);
   redirect(`/documenten/${document.id}`);
+}
+
+async function syncDealLineFromContract(input: {
+  dealId: string;
+  productId: string;
+  qty: number;
+  unitPrice: number;
+}) {
+  const product = await prisma.product.findUnique({
+    where: { id: input.productId },
+    select: { cost: true },
+  });
+  const existing = await prisma.dealLine.findFirst({
+    where: { dealId: input.dealId, productId: input.productId },
+    select: { id: true, unitCost: true },
+  });
+  const unitCost =
+    product && product.cost > 0
+      ? product.cost
+      : (existing?.unitCost ?? 0);
+  if (existing) {
+    await prisma.dealLine.update({
+      where: { id: existing.id },
+      data: { qty: input.qty, unitPrice: input.unitPrice, unitCost },
+    });
+  } else {
+    await prisma.dealLine.create({
+      data: {
+        dealId: input.dealId,
+        productId: input.productId,
+        qty: input.qty,
+        unitPrice: input.unitPrice,
+        unitCost,
+      },
+    });
+  }
+
+  const deal = await prisma.deal.findUnique({
+    where: { id: input.dealId },
+    select: {
+      discountPercent: true,
+      setupCost: true,
+      monthlyCost: true,
+      commissionCost: true,
+      recurringValue: true,
+      lines: { select: { qty: true, unitPrice: true, unitCost: true } },
+    },
+  });
+  if (!deal) return;
+
+  const { dealEconomics } = await import("./deal-economics");
+  const economics = dealEconomics({
+    lines: deal.lines,
+    discountPercent: deal.discountPercent,
+    setupCost: deal.setupCost,
+    monthlyCost: deal.monthlyCost,
+    commissionCost: deal.commissionCost,
+    recurringValue: deal.recurringValue,
+    monthlyHorizon: deal.recurringValue > 0 || deal.monthlyCost > 0 ? 12 : 0,
+  });
+  await prisma.deal.update({
+    where: { id: input.dealId },
+    data: { grossMargin: economics.hasCostData ? economics.margin : null },
+  });
 }
 
 /** Legt vast dat de klant getekend heeft. */

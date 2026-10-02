@@ -17,10 +17,13 @@ export type DealPanelDeal = {
   expectedCloseAt: Date | null;
   nextStep: string | null;
   expectedMachineCount: number;
+  /** Brutowinstfractie 0–1, of null als er geen kostprijs is. */
+  grossMargin: number | null;
   lines: Array<{
     productId: string;
     qty: number;
     unitPrice: number;
+    unitCost: number;
     product: { name: string };
   }>;
 };
@@ -75,6 +78,12 @@ export function DealPanel({
             value={deal.expectedCloseAt?.toLocaleDateString("nl-BE") ?? "—"}
           />
           <DealStat label="Volgende stap" value={deal.nextStep ?? "—"} />
+          {deal.grossMargin != null ? (
+            <DealStat
+              label="Brutomarge"
+              value={`${Math.round(deal.grossMargin * 100)}%`}
+            />
+          ) : null}
         </div>
       ) : null}
 

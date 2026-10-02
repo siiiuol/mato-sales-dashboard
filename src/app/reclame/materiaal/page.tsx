@@ -35,6 +35,37 @@ export default async function ReclameMateriaalPage() {
         </p>
       </div>
 
+      <section className="panel p-4 sm:p-5 space-y-3 border border-[var(--accent)]/25">
+        <div>
+          <p className="label text-[var(--accent)]">Documenten</p>
+          <h2 className="font-medium text-lg mt-1">
+            Verhuur en verkoop
+          </h2>
+          <p className="text-sm text-[var(--text-dim)] mt-1 max-w-2xl">
+            Werkblad voor <strong>verhuur</strong> (partner in de shop) en{" "}
+            <strong>verkoop</strong> (aankoop van een automaat). De tekst volgt
+            het model dat u kiest, bijvoorbeeld S1 in plaats van M1.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/klantdocumenten/werkblad.html?use=huur"
+            className="btn btn-primary text-sm"
+          >
+            Verhuur — werkblad
+          </a>
+          <a
+            href="/klantdocumenten/werkblad.html?use=koop"
+            className="btn btn-primary text-sm"
+          >
+            Verkoop — werkblad
+          </a>
+          <a href="/klantdocumenten" className="btn text-sm">
+            Overzicht
+          </a>
+        </div>
+      </section>
+
       {packs.map(
         (group) =>
           group.items.length > 0 && (

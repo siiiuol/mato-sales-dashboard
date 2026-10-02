@@ -38,47 +38,82 @@ export async function login(
   _previous: LoginState,
   formData: FormData
 ): Promise<LoginState> {
-  const parsed = loginSchema.safeParse({
-    email: formData.get("email"),
-    password: formData.get("password"),
-  });
-  if (!parsed.success) return { error: "Vul een geldig e-mailadres en wachtwoord in." };
+  try {
+    const parsed = loginSchema.safeParse({
+      email: formData.get("email"),
+      password: formData.get("password"),
+    });
+    if (!parsed.success) {
+      return { error: "Vul een geldig e-mailadres en wachtwoord in." };
+    }
 
-  const { email, password } = parsed.data;
-  const ip = await clientIp();
+    const { email, password } = parsed.data;
+    const ip = await clientIp();
 
-  const rate = await checkLoginRate(email, ip);
-  if (!rate.allowed) {
+    const rate = await checkLoginRate(email, ip);
+    if (!rate.allowed) {
+      return {
+        error: `Te veel mislukte pogingen. Probeer over ${rate.retryAfterMinutes} minuten opnieuw.`,
+      };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        name: true,
+        passwordHash: true,
+        role: true,
+        active: true,
+        sessionVersion: true,
+      },
+    });
+    const usable = Boolean(user?.active && ROLES.includes(user.role));
+    const valid = await compare(
+      password,
+      usable && user ? user.passwordHash : TIMING_EQUALISER_HASH
+    );
+
+    if (!usable || !valid || !user) {
+      await recordLoginAttempt(email, ip, false);
+      return { error: "Onjuist e-mailadres of wachtwoord." };
+    }
+
+    await recordLoginAttempt(email, ip, true);
+    await pruneLoginAttempts();
+    try {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: new Date() },
+      });
+    } catch (updateErr) {
+      // Schema kan achterlopen (ontbrekende lastLoginAt); login mag niet blokkeren.
+      console.warn("lastLoginAt update skipped", updateErr);
+    }
+
+    await createSession({
+      userId: user.id,
+      role: user.role as AppRole,
+      v: user.sessionVersion,
+    });
+    redirect("/");
+  } catch (err) {
+    // redirect() gooit een speciale Next-fout — die mag niet als login-fout
+    // worden opgevangen.
+    if (
+      err &&
+      typeof err === "object" &&
+      "digest" in err &&
+      String((err as { digest?: string }).digest).startsWith("NEXT_REDIRECT")
+    ) {
+      throw err;
+    }
+    console.error("login failed", err);
     return {
-      error: `Te veel mislukte pogingen. Probeer over ${rate.retryAfterMinutes} minuten opnieuw.`,
+      error:
+        "Aanmelden lukte niet door een serverfout. Probeer het zo opnieuw of bel de beheerder.",
     };
   }
-
-  const user = await prisma.user.findUnique({ where: { email } });
-  const usable = Boolean(user?.active && ROLES.includes(user.role));
-  const valid = await compare(
-    password,
-    usable && user ? user.passwordHash : TIMING_EQUALISER_HASH
-  );
-
-  if (!usable || !valid || !user) {
-    await recordLoginAttempt(email, ip, false);
-    return { error: "Onjuist e-mailadres of wachtwoord." };
-  }
-
-  await recordLoginAttempt(email, ip, true);
-  await pruneLoginAttempts();
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { lastLoginAt: new Date() },
-  });
-
-  await createSession({
-    userId: user.id,
-    role: user.role as AppRole,
-    v: user.sessionVersion,
-  });
-  redirect("/");
 }
 
 export async function logout() {

@@ -47,7 +47,7 @@ export default async function RootLayout({
   return (
     <html lang="nl" className={`${display.variable} ${body.variable} ${mono.variable} h-full`}>
       <body className="min-h-full antialiased">
-        <Shell role={user?.role ?? null}>
+        <Shell role={user?.role ?? null} userName={user?.name ?? null}>
           {children}
         </Shell>
       </body>

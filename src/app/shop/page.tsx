@@ -10,6 +10,7 @@ import {
   setShopCapacity,
   updateShopWaitlistStatus,
 } from "@/lib/shop-actions";
+import { readShopCapacity } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,8 @@ type SlotPlacement = {
   contractStartedAt: Date | null;
   contractEndsAt: Date | null;
   renewalStatus: string;
+  monthlyFee: number;
+  commissionPct: number;
   placedAt: Date;
   product: { name: string } | null;
   customer: { id: string; name: string; phone: string | null; email: string | null };
@@ -35,13 +38,8 @@ type SlotPlacement = {
 export default async function ShopPage() {
   const user = await requirePageUser(["admin", "sales", "reviewer"]);
 
-  const [settings, placements, tenants, waitlist] = await Promise.all([
-    prisma.appSettings.upsert({
-      where: { id: "default" },
-      update: {},
-      create: { id: "default" },
-      select: { shopCapacity: true },
-    }),
+  const [shopCapacity, placements, tenants, waitlist] = await Promise.all([
+    readShopCapacity(),
     prisma.machinePlacement.findMany({
       where: { site: SHOP_DIKSMUIDE.site, status: "ACTIVE" },
       orderBy: [{ shopSlot: "asc" }, { placedAt: "asc" }],
@@ -56,6 +54,8 @@ export default async function ShopPage() {
         contractStartedAt: true,
         contractEndsAt: true,
         renewalStatus: true,
+        monthlyFee: true,
+        commissionPct: true,
         placedAt: true,
         product: { select: { name: true } },
         customer: {
@@ -84,6 +84,8 @@ export default async function ShopPage() {
             contractStartedAt: true,
             contractEndsAt: true,
             renewalStatus: true,
+            monthlyFee: true,
+            commissionPct: true,
             placedAt: true,
             shopSlot: true,
             product: { select: { name: true } },
@@ -112,7 +114,7 @@ export default async function ShopPage() {
     }),
   ]);
 
-  const capacity = Math.max(1, Math.min(40, settings.shopCapacity || 8));
+  const capacity = Math.max(1, Math.min(40, shopCapacity || 8));
   const bySlot = new Map<number, SlotPlacement>();
   const unassigned: SlotPlacement[] = [];
   for (const p of placements) {
@@ -251,6 +253,11 @@ export default async function ShopPage() {
                 </span>
                 <span className="text-xs text-[var(--text-dim)]">
                   {shopContractTypeLabel(p.contractType)}
+                  {p.monthlyFee > 0
+                    ? ` · €${Math.round(p.monthlyFee)}/m`
+                    : p.commissionPct > 0
+                      ? ` · ${p.commissionPct}%`
+                      : ""}
                 </span>
               </Link>
             );
@@ -306,6 +313,7 @@ export default async function ShopPage() {
                   <th>Plaats</th>
                   <th>Automaat</th>
                   <th>Contract</th>
+                  <th>Bedrag</th>
                   <th>Referentie</th>
                   <th>Sinds</th>
                   <th>Einde</th>
@@ -328,7 +336,7 @@ export default async function ShopPage() {
                             {t.name}
                           </Link>
                         </td>
-                        <td colSpan={7} className="text-[var(--text-dim)]">
+                        <td colSpan={8} className="text-[var(--text-dim)]">
                           Geen plaatsing
                         </td>
                         <td>
@@ -366,6 +374,13 @@ export default async function ShopPage() {
                         ) : null}
                       </td>
                       <td>{shopContractTypeLabel(p.contractType)}</td>
+                      <td className="mono text-xs">
+                        {p.monthlyFee > 0
+                          ? `€${Math.round(p.monthlyFee)}/m`
+                          : p.commissionPct > 0
+                            ? `${p.commissionPct}%`
+                            : "—"}
+                      </td>
                       <td className="mono text-xs">{p.contractRef ?? "—"}</td>
                       <td>
                         {(p.contractStartedAt ?? p.placedAt).toLocaleDateString("nl-BE")}

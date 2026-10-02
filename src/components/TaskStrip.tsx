@@ -15,12 +15,20 @@ import { completeTask } from "@/lib/task-actions";
  * selectie en de groepeerlogica, zodat deze strook en `/taken` nooit
  * onafhankelijk van elkaar gaan bepalen wat "vandaag" betekent.
  */
-export async function TaskStrip({ userId }: { userId: string }) {
-  const tasks: DueTask[] = await prisma.task.findMany({
-    where: { assignedToId: userId, status: "OPEN" },
-    orderBy: [{ dueAt: "asc" }, { priority: "asc" }],
-    select: TASK_SELECT,
-  });
+export async function TaskStrip({
+  userId,
+  tasks: prefetched,
+}: {
+  userId: string;
+  tasks?: DueTask[];
+}) {
+  const tasks: DueTask[] =
+    prefetched ??
+    (await prisma.task.findMany({
+      where: { assignedToId: userId, status: "OPEN" },
+      orderBy: [{ dueAt: "asc" }, { priority: "asc" }],
+      select: TASK_SELECT,
+    }));
   const { overdue, today } = groupTasksByDueDate(tasks);
   const urgent = [...overdue, ...today];
   if (urgent.length === 0) return null;

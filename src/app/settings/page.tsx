@@ -18,11 +18,21 @@ export default async function SettingsPage({
   const connection = await prisma.mailboxConnection.findUnique({
     where: { userId: user.id },
   });
-  const settings = await prisma.appSettings.upsert({
+  const settings = await prisma.appSettings.findUnique({
     where: { id: "default" },
-    update: {},
-    create: { id: "default" },
   });
+  if (!settings) {
+    return (
+      <div className="space-y-4 anim-lock max-w-3xl">
+        <h1 className="text-2xl font-semibold">Instellingen</h1>
+        <p className="text-sm text-[var(--text-dim)]">
+          Er is nog geen instellingenrij in de database. Draai{" "}
+          <code>npm run db:seed</code> of sla één keer opnieuw op na het invullen
+          van het formulier hieronder zodra die beschikbaar is.
+        </p>
+      </div>
+    );
+  }
 
   let categories: string[] = [];
   let zones: string[] = [];
@@ -164,6 +174,51 @@ export default async function SettingsPage({
             masked={settings.msClientSecret ? "•••••••• bewaard" : undefined}
             hint="Versleuteld opgeslagen. Entra toont de waarde maar één keer, bij het aanmaken. Als koppelen faalt met een ontcijferfout, plak het geheim hier opnieuw — het veld toont anders nog 'bewaard' terwijl het niet meer leesbaar is."
           />
+        </fieldset>
+
+        <fieldset className="space-y-4 border-t border-[var(--border)] pt-4">
+          <legend className="label text-[var(--accent)]">
+            Camera&apos;s (UniFi Protect)
+          </legend>
+          <p className="text-sm text-[var(--text-dim)]">
+            Maak in UniFi Protect een Alarm Manager-regel met trigger{" "}
+            <span className="mono">Smart Detect → Persoon</span> en actie{" "}
+            <span className="mono">Webhook</span>. De console stuurt de melding
+            zelf naar buiten, dus er hoeft niets opengezet te worden op het
+            netwerk in Diksmuide. Zet hieronder een zelfgekozen geheim en gebruik
+            als URL:
+          </p>
+          <p className="text-sm mono break-all bg-[var(--surface-2)] p-3 rounded">
+            {"<jouw-adres>"}/api/unifi/webhook?secret={"<geheim>"}
+          </p>
+          <SecretField
+            name="unifiWebhookSecret"
+            label="Webhook-geheim"
+            masked={settings.unifiWebhookSecret ? "•••••••• bewaard" : undefined}
+            hint="Vrij te kiezen, zolang het lang en willekeurig is. Zonder dit geheim weigert het eindpunt alles. Wijzig je het, pas dan ook de URL in de Alarm Manager-regel aan."
+          />
+
+          <div>
+            <label className="label block mb-1" htmlFor="cameraStreams">
+              Livebeeld per camera
+            </label>
+            <textarea
+              id="cameraStreams"
+              name="cameraStreams"
+              className="input mono"
+              rows={5}
+              spellCheck={false}
+              placeholder={"Automaat 1 & 2 = https://monitor.ui.com/…\nAutomaat 3 & 4 = https://monitor.ui.com/…"}
+              defaultValue={settings.cameraStreams || ""}
+            />
+            <p className="text-xs text-[var(--text-dim)] mt-1">
+              Eén regel per camera, als <span className="mono">naam = link</span>.
+              De link maak je in UniFi Protect per camera onder{" "}
+              <span className="mono">Share Livestream</span>. Alleen adressen op{" "}
+              <span className="mono">monitor.ui.com</span> worden getoond. Let op:
+              wie zo&apos;n link heeft, kijkt mee zonder wachtwoord.
+            </p>
+          </div>
         </fieldset>
 
         <div>

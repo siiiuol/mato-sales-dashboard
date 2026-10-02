@@ -1,96 +1,85 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  isSectionHome,
+  APP_TABS,
   PLATFORM_ADMIN_NAV,
-  SECTIONS,
-  sectionFor,
+  isTabActive,
+  isTabHome,
+  tabFor,
 } from "./constants";
 
-test("the reclame home selects the reclame section", () => {
-  assert.equal(sectionFor("/reclame").key, "reclame");
-});
-
-test("a nested reclame path stays in the reclame section", () => {
-  assert.equal(sectionFor("/reclame/materiaal").key, "reclame");
-  assert.equal(sectionFor("/reclame/cmsir5yeh0080tyw1xktfslrr").key, "reclame");
-});
-
-test("shop section owns /shop paths", () => {
-  assert.equal(sectionFor("/shop").key, "shop");
-  assert.equal(sectionFor("/shop/nieuw").key, "shop");
-  assert.equal(sectionFor("/shop/abc").key, "shop");
-});
-
-test("verkoop is the fallback, so no path is homeless", () => {
-  for (const pad of [
-    "/",
-    "/leads",
-    "/leads/abc",
-    "/calls",
-    "/team",
-    "/settings",
-    "/handleiding",
-    "/wat-dan-ook",
-  ]) {
-    assert.equal(sectionFor(pad).key, "verkoop", `${pad} hoort bij Verkoop`);
-  }
-});
-
-test("a path that merely starts with the same letters is not the section", () => {
-  assert.equal(sectionFor("/reclamefolder").key, "verkoop");
-});
-
-test("only section homes match exactly", () => {
-  assert.equal(isSectionHome("/"), true);
-  assert.equal(isSectionHome("/reclame"), true);
-  assert.equal(isSectionHome("/reclame/materiaal"), false);
-  assert.equal(isSectionHome("/leads"), false);
-});
-
-test("every section has a home that resolves back to itself", () => {
-  for (const s of SECTIONS) {
-    assert.equal(sectionFor(s.home).key, s.key, `${s.label} wijst naar zichzelf`);
-  }
-});
-
-test("no primary nav link is duplicated across sections", () => {
-  const alle = SECTIONS.flatMap((s) => s.nav.map((n) => n.href));
-  assert.equal(new Set(alle).size, alle.length);
-});
-
-test("the platform links belong to no section", () => {
-  const sectieLinks = new Set<string>(
-    SECTIONS.flatMap((s) => s.nav.map((n) => n.href))
+test("the four tabs are Vandaag, Zaken, Documenten, Shop", () => {
+  assert.deepEqual(
+    APP_TABS.map((tab) => tab.href),
+    ["/", "/leads", "/klantdocumenten", "/shop"]
   );
+  assert.deepEqual(
+    APP_TABS.map((tab) => tab.label),
+    ["Vandaag", "Zaken", "Documenten", "Shop"]
+  );
+});
+
+test("a nested zaak path stays on Zaken", () => {
+  assert.equal(tabFor("/leads").key, "zaken");
+  assert.equal(tabFor("/leads/abc").key, "zaken");
+});
+
+test("documenten owns klantdocumenten and old reclame URLs", () => {
+  assert.equal(tabFor("/klantdocumenten").key, "documenten");
+  assert.equal(tabFor("/klantdocumenten/werkblad.html").key, "documenten");
+  assert.equal(tabFor("/reclame").key, "documenten");
+  assert.equal(tabFor("/reclame/materiaal").key, "documenten");
+});
+
+test("shop owns /shop paths", () => {
+  assert.equal(tabFor("/shop").key, "shop");
+  assert.equal(tabFor("/shop/nieuw").key, "shop");
+  assert.equal(tabFor("/shop/abc").key, "shop");
+});
+
+test("unknown paths fall back to Vandaag", () => {
+  for (const pad of ["/", "/bellen", "/team", "/settings", "/handleiding", "/wat-dan-ook"]) {
+    assert.equal(tabFor(pad).key, "vandaag", `${pad} valt terug op Vandaag`);
+  }
+});
+
+test("a path that merely starts with the same letters is not the tab", () => {
+  assert.equal(isTabActive("/leads", "/leadership"), false);
+  assert.equal(isTabActive("/shop", "/shopping"), false);
+});
+
+test("only tab homes match exactly for Vandaag", () => {
+  assert.equal(isTabHome("/"), true);
+  assert.equal(isTabHome("/leads"), true);
+  assert.equal(isTabHome("/klantdocumenten"), true);
+  assert.equal(isTabHome("/shop"), true);
+  assert.equal(isTabHome("/reclame"), false);
+  assert.equal(isTabActive("/", "/"), true);
+  assert.equal(isTabActive("/", "/leads"), false);
+  assert.equal(isTabActive("/leads", "/leads/abc"), true);
+});
+
+test("every tab home resolves back to itself", () => {
+  for (const tab of APP_TABS) {
+    assert.equal(tabFor(tab.href).key, tab.key, `${tab.label} wijst naar zichzelf`);
+  }
+});
+
+test("no tab href is duplicated", () => {
+  const hrefs = APP_TABS.map((tab) => tab.href);
+  assert.equal(new Set(hrefs).size, hrefs.length);
+});
+
+test("the platform links belong to no tab", () => {
+  const tabLinks = new Set<string>(APP_TABS.map((tab) => tab.href));
   for (const item of PLATFORM_ADMIN_NAV) {
-    assert.equal(sectieLinks.has(item.href), false, `${item.href} staat dubbel`);
+    assert.equal(tabLinks.has(item.href), false, `${item.href} staat dubbel`);
   }
 });
 
-test("verkoop primary nav is the four daily sales routes", () => {
-  const verkoop = SECTIONS[0];
+test("admin account menu is only Team and Instellingen", () => {
   assert.deepEqual(
-    verkoop.nav.map((n) => n.href),
-    ["/", "/bellen", "/leads", "/deals"]
-  );
-  assert.deepEqual(
-    verkoop.more.map((n) => n.href),
-    ["/aios", "/rapporten", "/taken", "/handleiding"]
-  );
-});
-
-test("shop and klanten keep secondary routes out of the primary bar", () => {
-  assert.deepEqual(
-    SECTIONS.find((s) => s.key === "shop")?.nav.map((n) => n.href),
-    ["/shop"]
-  );
-  assert.deepEqual(
-    SECTIONS.find((s) => s.key === "klanten")?.nav.map((n) => n.href),
-    ["/klanten"]
-  );
-  assert.deepEqual(
-    SECTIONS.find((s) => s.key === "reclame")?.nav.map((n) => n.href),
-    ["/reclame"]
+    PLATFORM_ADMIN_NAV.map((item) => item.href),
+    ["/team", "/settings"]
   );
 });

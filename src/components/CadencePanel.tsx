@@ -14,6 +14,7 @@ export function CadencePanel({
   const next = nextCadenceTask(tasks);
   const label = {
     LEAD_FOLLOWUP: "Leadopvolging",
+    PROPOSAL_NO_REPLY: "Voorstel zonder antwoord",
     CUSTOMER_ONBOARDING: "Klantnazorg",
     INSTALL_HANDOFF: "Installatie",
     SHOP_RENEWAL: "Contractverlenging",

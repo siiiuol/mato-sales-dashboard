@@ -109,6 +109,8 @@ export async function sendMail({
   };
 }
 
+export type MailFolder = "inbox" | "sentitems";
+
 export type IncomingMessage = {
   graphMessageId: string;
   conversationId: string | null;
@@ -117,6 +119,7 @@ export type IncomingMessage = {
   from: string;
   to: string;
   receivedAt: Date;
+  folder: MailFolder;
 };
 
 export type GraphMessage = {
@@ -128,12 +131,20 @@ export type GraphMessage = {
   from?: { emailAddress?: { address?: string | null } | null } | null;
   toRecipients?: Array<{ emailAddress?: { address?: string | null } | null }> | null;
   receivedDateTime?: string | null;
+  sentDateTime?: string | null;
 };
 
 /** Zet ruwe Graph-velden om naar wat wij bewaren. */
-export function toIncoming(raw: GraphMessage): IncomingMessage {
+export function toIncoming(
+  raw: GraphMessage,
+  folder: MailFolder = "inbox"
+): IncomingMessage {
   const html = raw.body?.contentType?.toLowerCase() === "html";
   const content = raw.body?.content ?? "";
+  const when =
+    folder === "sentitems"
+      ? raw.sentDateTime ?? raw.receivedDateTime
+      : raw.receivedDateTime ?? raw.sentDateTime;
   return {
     graphMessageId: raw.id,
     conversationId: raw.conversationId ?? null,
@@ -141,7 +152,8 @@ export function toIncoming(raw: GraphMessage): IncomingMessage {
     body: html ? stripHtml(content) : content || (raw.bodyPreview ?? ""),
     from: raw.from?.emailAddress?.address ?? "",
     to: raw.toRecipients?.[0]?.emailAddress?.address ?? "",
-    receivedAt: raw.receivedDateTime ? new Date(raw.receivedDateTime) : new Date(),
+    receivedAt: when ? new Date(when) : new Date(),
+    folder,
   };
 }
 
@@ -164,8 +176,10 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
+type FolderPage = { value?: GraphMessage[]; "@odata.nextLink"?: string };
+
 /**
- * Haalt binnengekomen mail op sinds een tijdstip.
+ * Haalt mail uit één mapje op sinds een tijdstip.
  *
  * Oudste eerst, en met paginering. Dat is niet willekeurig: de aanroeper zet
  * zijn peilmerk op het nieuwste bericht dat hij bewaarde. Haalden we nieuwste
@@ -173,35 +187,35 @@ export function stripHtml(html: string): string {
  * over alle oudere berichten heen en zijn die voorgoed onzichtbaar — terwijl
  * het scherm "niets nieuws" meldt.
  *
- * `truncated` zegt of er nog meer klaarstond dan we in één ronde ophaalden, zodat
- * de medewerker te horen krijgt dat hij nog een keer moet drukken.
+ * `truncated` zegt of er nog meer klaarstond dan we in één ronde ophaalden.
  */
-export async function fetchInbox({
+export async function fetchMailFolder({
   accessToken,
+  folder,
   since,
   maxMessages = 200,
 }: {
   accessToken: string;
+  folder: MailFolder;
   since: Date;
   maxMessages?: number;
 }): Promise<{ messages: IncomingMessage[]; truncated: boolean }> {
+  const dateField = folder === "sentitems" ? "sentDateTime" : "receivedDateTime";
   const params = new URLSearchParams({
-    $filter: `receivedDateTime ge ${since.toISOString()}`,
-    $orderby: "receivedDateTime asc",
+    $filter: `${dateField} ge ${since.toISOString()}`,
+    $orderby: `${dateField} asc`,
     $top: "50",
-    $select: "id,conversationId,subject,bodyPreview,body,from,toRecipients,receivedDateTime",
+    $select:
+      "id,conversationId,subject,bodyPreview,body,from,toRecipients,receivedDateTime,sentDateTime",
   });
 
-  let url: string | null = `/me/mailFolders/inbox/messages?${params.toString()}`;
+  let url: string | null = `/me/mailFolders/${folder}/messages?${params.toString()}`;
   const messages: IncomingMessage[] = [];
   let truncated = false;
 
   while (url) {
-    const page: { value?: GraphMessage[]; "@odata.nextLink"?: string } = await graph(
-      accessToken,
-      url
-    );
-    messages.push(...(page.value ?? []).map(toIncoming));
+    const page: FolderPage = await graph(accessToken, url);
+    messages.push(...(page.value ?? []).map((raw) => toIncoming(raw, folder)));
 
     const next = page["@odata.nextLink"];
     if (!next) break;
@@ -218,4 +232,22 @@ export async function fetchInbox({
   }
 
   return { messages, truncated };
+}
+
+/** Postvak IN — antwoorden van prospects. */
+export async function fetchInbox(args: {
+  accessToken: string;
+  since: Date;
+  maxMessages?: number;
+}): Promise<{ messages: IncomingMessage[]; truncated: boolean }> {
+  return fetchMailFolder({ ...args, folder: "inbox" });
+}
+
+/** Verzonden items — ook wat de verkoper zelf uit Outlook stuurde. */
+export async function fetchSent(args: {
+  accessToken: string;
+  since: Date;
+  maxMessages?: number;
+}): Promise<{ messages: IncomingMessage[]; truncated: boolean }> {
+  return fetchMailFolder({ ...args, folder: "sentitems" });
 }

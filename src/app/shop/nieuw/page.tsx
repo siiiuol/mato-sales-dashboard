@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { SHOP_DIKSMUIDE } from "@/lib/constants";
 import { ShopTenantForm } from "@/components/ShopTenantForm";
 import { ShopWaitlistForm } from "@/components/ShopWaitlistForm";
+import { readShopCapacity } from "@/lib/app-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -16,18 +17,13 @@ export default async function ShopNieuwPage({
   const { slot: slotParam, leadId } = await searchParams;
   const preferred = slotParam ? Number(slotParam) : null;
 
-  const [products, settings, taken, lead] = await Promise.all([
+  const [products, shopCapacity, taken, lead] = await Promise.all([
     prisma.product.findMany({
       where: { active: true, line: "MACHINE" },
       orderBy: { name: "asc" },
       select: { id: true, name: true, line: true },
     }),
-    prisma.appSettings.upsert({
-      where: { id: "default" },
-      update: {},
-      create: { id: "default" },
-      select: { shopCapacity: true },
-    }),
+    readShopCapacity(),
     prisma.machinePlacement.findMany({
       where: {
         site: SHOP_DIKSMUIDE.site,
@@ -50,7 +46,7 @@ export default async function ShopNieuwPage({
       : Promise.resolve(null),
   ]);
 
-  const capacity = Math.max(1, Math.min(40, settings.shopCapacity || 8));
+  const capacity = Math.max(1, Math.min(40, shopCapacity || 8));
   const occupied = new Set(
     taken.map((t) => t.shopSlot).filter((n): n is number => n != null)
   );

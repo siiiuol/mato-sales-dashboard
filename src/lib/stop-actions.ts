@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { cancelCadence } from "./cadence-actions";
+import { cancelContactCadences } from "./cadence-actions";
 import { prisma } from "./db";
 import { requireUser } from "./dal";
 import { formObject, idSchema } from "./validation";
@@ -99,7 +99,7 @@ export async function stopLead(formData: FormData) {
     });
   });
 
-  await cancelCadence({ leadId: input.leadId }, "LEAD_FOLLOWUP");
+  await cancelContactCadences({ leadId: input.leadId });
   revalidatePath(`/leads/${input.leadId}`);
   revalidatePath("/leads");
   revalidatePath("/");

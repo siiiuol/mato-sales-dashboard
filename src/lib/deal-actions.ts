@@ -4,13 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
-  cancelCadence,
+  cancelContactCadences,
   enrollCustomerOnboarding,
 } from "./cadence-actions";
 import { stepsFor } from "./cadences";
 import { requireUser } from "./dal";
 import { prisma } from "./db";
+import { dealEconomics } from "./deal-economics";
 import { formObject, idSchema } from "./validation";
+import { commissionForDeal } from "./team-stats";
 
 const optionalId = z.string().cuid().optional().or(z.literal(""));
 
@@ -75,13 +77,22 @@ export async function saveDeal(formData: FormData) {
         });
 
     if (input.productId) {
+      const product = await tx.product.findUnique({
+        where: { id: input.productId },
+        select: { cost: true },
+      });
       const existingLine = await tx.dealLine.findFirst({
         where: { dealId: deal.id, productId: input.productId },
-        select: { id: true },
+        select: { id: true, unitCost: true },
       });
+      const unitCost =
+        product && product.cost > 0
+          ? product.cost
+          : (existingLine?.unitCost ?? 0);
       const lineData = {
         qty: input.expectedMachineCount,
         unitPrice: input.unitPrice ?? input.expectedValue,
+        unitCost,
       };
       if (existingLine) {
         await tx.dealLine.update({
@@ -97,6 +108,7 @@ export async function saveDeal(formData: FormData) {
           },
         });
       }
+      await refreshDealEconomics(tx, deal.id);
     }
 
     await tx.lead.update({
@@ -165,7 +177,7 @@ export async function markDealLost(formData: FormData) {
       },
     }),
   ]);
-  await cancelCadence({ leadId: input.leadId }, "LEAD_FOLLOWUP");
+  await cancelContactCadences({ leadId: input.leadId });
   revalidatePath(`/leads/${input.leadId}`);
   revalidatePath("/deals");
   revalidatePath("/");
@@ -248,14 +260,20 @@ export async function closeDealWithHandoff(formData: FormData) {
           },
         });
 
+    const product = await tx.product.findUnique({
+      where: { id: input.productId },
+      select: { cost: true },
+    });
     const line = await tx.dealLine.findFirst({
       where: { dealId: deal.id, productId: input.productId },
-      select: { id: true },
+      select: { id: true, unitCost: true },
     });
+    const unitCost =
+      product && product.cost > 0 ? product.cost : (line?.unitCost ?? 0);
     if (line) {
       await tx.dealLine.update({
         where: { id: line.id },
-        data: { qty: 1, unitPrice: input.value },
+        data: { qty: 1, unitPrice: input.value, unitCost },
       });
     } else {
       await tx.dealLine.create({
@@ -264,9 +282,23 @@ export async function closeDealWithHandoff(formData: FormData) {
           productId: input.productId,
           qty: 1,
           unitPrice: input.value,
+          unitCost,
         },
       });
     }
+
+    const owner = await tx.user.findUnique({
+      where: { id: lead.ownerId ?? user.id },
+      select: { commissionType: true, commissionValue: true },
+    });
+    const commissionCost = owner
+      ? commissionForDeal(owner, input.value)
+      : 0;
+    await tx.deal.update({
+      where: { id: deal.id },
+      data: { commissionCost },
+    });
+    await refreshDealEconomics(tx, deal.id);
 
     const placement = await tx.machinePlacement.create({
       data: {
@@ -327,7 +359,7 @@ export async function closeDealWithHandoff(formData: FormData) {
   });
 
   await Promise.all([
-    cancelCadence({ leadId: lead.id }, "LEAD_FOLLOWUP"),
+    cancelContactCadences({ leadId: lead.id }),
     enrollCustomerOnboarding(result.customer.id, result.deal.ownerId ?? user.id),
   ]);
   revalidatePath(`/leads/${lead.id}`);
@@ -337,4 +369,42 @@ export async function closeDealWithHandoff(formData: FormData) {
   revalidatePath("/taken");
   revalidatePath("/");
   redirect(`/klanten/${result.customer.id}`);
+}
+
+type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * Herberekent brutowinst op de deal. Marge blijft null zolang er geen kost is —
+ * anders liegen we 100%.
+ */
+async function refreshDealEconomics(tx: Tx, dealId: string) {
+  const deal = await tx.deal.findUnique({
+    where: { id: dealId },
+    select: {
+      discountPercent: true,
+      setupCost: true,
+      monthlyCost: true,
+      commissionCost: true,
+      recurringValue: true,
+      lines: { select: { qty: true, unitPrice: true, unitCost: true } },
+    },
+  });
+  if (!deal) return;
+
+  const economics = dealEconomics({
+    lines: deal.lines,
+    discountPercent: deal.discountPercent,
+    setupCost: deal.setupCost,
+    monthlyCost: deal.monthlyCost,
+    commissionCost: deal.commissionCost,
+    recurringValue: deal.recurringValue,
+    monthlyHorizon: deal.recurringValue > 0 || deal.monthlyCost > 0 ? 12 : 0,
+  });
+
+  await tx.deal.update({
+    where: { id: dealId },
+    data: {
+      grossMargin: economics.hasCostData ? economics.margin : null,
+    },
+  });
 }

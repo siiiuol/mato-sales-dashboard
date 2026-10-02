@@ -148,6 +148,48 @@ export function ShopTenantForm({
             defaultValue={30}
           />
         </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block space-y-1">
+            <span className="text-sm text-[var(--text-dim)]">
+              Maandelijkse huur (€)
+            </span>
+            <input
+              name="monthlyFee"
+              type="number"
+              min={0}
+              step="0.01"
+              className="input"
+              defaultValue={0}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm text-[var(--text-dim)]">
+              Commissie (%)
+            </span>
+            <input
+              name="commissionPct"
+              type="number"
+              min={0}
+              max={100}
+              step="0.1"
+              className="input"
+              defaultValue={0}
+            />
+          </label>
+        </div>
+        <label className="block space-y-1">
+          <span className="text-sm text-[var(--text-dim)]">
+            Minimumomzet per maand (€, optioneel)
+          </span>
+          <input
+            name="minimumTurnover"
+            type="number"
+            min={0}
+            step="1"
+            className="input"
+            defaultValue={0}
+          />
+        </label>
         <textarea
           name="placementNotes"
           className="textarea"

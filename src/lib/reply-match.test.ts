@@ -1,12 +1,35 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { matchReplies, matchReply, normaliseAddress } from "./reply-match";
+import {
+  businessDomain,
+  buildDomainIndex,
+  matchReplies,
+  matchReply,
+  normaliseAddress,
+  shouldKeepUnmatched,
+  type MatchContext,
+  type MatchTarget,
+} from "./reply-match";
 import { stripHtml, toIncoming } from "./graph";
 
-function context(overrides: Partial<Parameters<typeof matchReply>[1]> = {}) {
+function target(leadId: string, customerId?: string | null): MatchTarget {
+  return { leadId, customerId: customerId ?? null };
+}
+
+function context(overrides: Partial<MatchContext> = {}): MatchContext {
   return {
-    conversationLeads: new Map([["conv-1", "lead-bakkerij"]]),
-    leadEmails: new Map([["info@zoetezonde.be", "lead-zonde"]]),
+    conversationLeads: new Map([["conv-1", target("lead-bakkerij")]]),
+    leadEmails: new Map([["info@zoetezonde.be", target("lead-zonde")]]),
+    customerEmails: new Map([
+      ["boekhouding@cafecentral.be", { customerId: "cust-central", leadId: null }],
+    ]),
+    domains: buildDomainIndex([
+      { email: "info@zoetezonde.be", target: target("lead-zonde") },
+      {
+        email: "boekhouding@cafecentral.be",
+        target: { customerId: "cust-central", leadId: null },
+      },
+    ]),
     knownMessageIds: new Set<string>(),
     ...overrides,
   };
@@ -20,18 +43,19 @@ test("a reply in our conversation lands on that lead", () => {
   assert.deepEqual(match, {
     graphMessageId: "m1",
     leadId: "lead-bakkerij",
+    customerId: null,
     reason: "gesprek",
+    confidence: 1,
   });
 });
 
 test("the conversation wins over the sender address", () => {
-  // Antwoordt de zaakvoerder vanaf zijn persoonlijke adres, dan is het gesprek
-  // het enige wat klopt.
   const match = matchReply(
     { graphMessageId: "m2", conversationId: "conv-1", from: "info@zoetezonde.be" },
     context()
   );
   assert.equal(match?.leadId, "lead-bakkerij");
+  assert.equal(match?.reason, "gesprek");
 });
 
 test("a fresh mail from a known lead address still lands right", () => {
@@ -39,11 +63,78 @@ test("a fresh mail from a known lead address still lands right", () => {
     { graphMessageId: "m3", conversationId: "conv-onbekend", from: "info@zoetezonde.be" },
     context()
   );
-  assert.deepEqual(match, {
-    graphMessageId: "m3",
-    leadId: "lead-zonde",
-    reason: "afzender",
-  });
+  assert.equal(match?.leadId, "lead-zonde");
+  assert.equal(match?.reason, "afzender");
+});
+
+test("a customer email matches without an open lead", () => {
+  const match = matchReply(
+    {
+      graphMessageId: "m-cust",
+      conversationId: null,
+      from: "boekhouding@cafecentral.be",
+    },
+    context()
+  );
+  assert.equal(match?.customerId, "cust-central");
+  assert.equal(match?.leadId, null);
+  assert.equal(match?.reason, "klant");
+});
+
+test("sent mail matches on the recipient, not the sender", () => {
+  const match = matchReply(
+    {
+      graphMessageId: "m-out",
+      conversationId: null,
+      from: "louis@matoautomaat.be",
+      to: "info@zoetezonde.be",
+      direction: "OUT",
+    },
+    context()
+  );
+  assert.equal(match?.leadId, "lead-zonde");
+  assert.equal(match?.reason, "afzender");
+});
+
+test("a unique business domain matches when the exact address is unknown", () => {
+  const match = matchReply(
+    {
+      graphMessageId: "m-dom",
+      conversationId: null,
+      from: "jan@zoetezonde.be",
+    },
+    context()
+  );
+  assert.equal(match?.leadId, "lead-zonde");
+  assert.equal(match?.reason, "domein");
+  assert.ok((match?.confidence ?? 0) < 0.9);
+});
+
+test("an ambiguous domain does not guess", () => {
+  const match = matchReply(
+    { graphMessageId: "m-amb", conversationId: null, from: "x@shared.be" },
+    context({
+      domains: buildDomainIndex([
+        { email: "a@shared.be", target: target("lead-a") },
+        { email: "b@shared.be", target: target("lead-b") },
+      ]),
+    })
+  );
+  assert.equal(match, null);
+});
+
+test("consumer domains never match by domain", () => {
+  assert.equal(businessDomain("jan@gmail.com"), null);
+  assert.equal(businessDomain("info@telenet.be"), null);
+  const match = matchReply(
+    { graphMessageId: "m-g", conversationId: null, from: "jan@gmail.com" },
+    context({
+      domains: new Map([
+        ["gmail.com", [target("lead-wrong")]],
+      ]),
+    })
+  );
+  assert.equal(match, null);
 });
 
 test("addresses match regardless of case or padding", () => {
@@ -55,8 +146,6 @@ test("addresses match regardless of case or padding", () => {
 });
 
 test("an unrelated mail is left alone", () => {
-  // Nieuwsbrieven, facturen, privémail: die horen niet in het dossier van een
-  // willekeurige bakkerij te belanden.
   assert.equal(
     matchReply(
       { graphMessageId: "m5", conversationId: null, from: "nieuws@krant.be" },
@@ -96,10 +185,9 @@ test("a batch keeps only what belongs somewhere", () => {
 });
 
 test("an empty sender never matches an empty lead address", () => {
-  // Een lead zonder mailadres mag geen magneet worden voor alles zonder afzender.
   const match = matchReply(
     { graphMessageId: "m8", conversationId: null, from: "" },
-    context({ leadEmails: new Map([["", "lead-zonder-adres"]]) })
+    context({ leadEmails: new Map([["", target("lead-zonder-adres")]]) })
   );
   assert.equal(match, null);
 });
@@ -107,6 +195,62 @@ test("an empty sender never matches an empty lead address", () => {
 test("normalising an address is idempotent", () => {
   assert.equal(normaliseAddress(" A@B.be "), "a@b.be");
   assert.equal(normaliseAddress(normaliseAddress(" A@B.be ")), "a@b.be");
+});
+
+test("shouldKeepUnmatched keeps sent mail and CRM-domain inbox mail", () => {
+  const domains = new Set(["zoetezonde.be"]);
+  assert.equal(
+    shouldKeepUnmatched(
+      {
+        direction: "OUT",
+        from: "louis@mato.be",
+        to: "onbekend@ergens.be",
+        subject: "Hallo",
+        conversationId: null,
+      },
+      domains
+    ),
+    true
+  );
+  assert.equal(
+    shouldKeepUnmatched(
+      {
+        direction: "IN",
+        from: "nieuws@newsletter.com",
+        to: "louis@mato.be",
+        subject: "Weekaanbieding",
+        conversationId: null,
+      },
+      domains
+    ),
+    false
+  );
+  assert.equal(
+    shouldKeepUnmatched(
+      {
+        direction: "IN",
+        from: "piet@zoetezonde.be",
+        to: "louis@mato.be",
+        subject: "Vraag",
+        conversationId: null,
+      },
+      domains
+    ),
+    true
+  );
+  assert.equal(
+    shouldKeepUnmatched(
+      {
+        direction: "IN",
+        from: "x@y.be",
+        to: "louis@mato.be",
+        subject: "Re: Automaat",
+        conversationId: null,
+      },
+      domains
+    ),
+    true
+  );
 });
 
 test("an HTML reply becomes readable text", () => {
@@ -136,11 +280,26 @@ test("a Graph message maps onto the fields we store", () => {
   assert.equal(incoming.from, "info@zoetezonde.be");
   assert.equal(incoming.to, "louis@matoautomaat.be");
   assert.equal(incoming.body, "Bel me maandag.");
+  assert.equal(incoming.folder, "inbox");
   assert.equal(incoming.receivedAt.toISOString(), "2026-08-12T09:30:00.000Z");
 });
 
+test("sent Graph messages use sentDateTime", () => {
+  const incoming = toIncoming(
+    {
+      id: "AAMkSent",
+      subject: "Voorstel",
+      from: { emailAddress: { address: "louis@mato.be" } },
+      toRecipients: [{ emailAddress: { address: "info@zaak.be" } }],
+      sentDateTime: "2026-09-01T14:00:00Z",
+    },
+    "sentitems"
+  );
+  assert.equal(incoming.folder, "sentitems");
+  assert.equal(incoming.receivedAt.toISOString(), "2026-09-01T14:00:00.000Z");
+});
+
 test("a message without a subject or body still maps", () => {
-  // Automatische antwoorden komen soms kaal binnen; dat mag de ronde niet breken.
   const incoming = toIncoming({ id: "AAMk999" });
   assert.equal(incoming.subject, "(geen onderwerp)");
   assert.equal(incoming.body, "");

@@ -24,29 +24,37 @@ export const getCurrentUser = cache(async () => {
   const session = await verifySessionToken(token);
   if (!session) return null;
 
-  const user = await prisma.user.findFirst({
-    where: { id: session.userId, active: true },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      photoUrl: true,
-      sessionVersion: true,
-    },
-  });
-  // Rol én versie moeten kloppen: een token blijft anders geldig nadat een
-  // medewerker gedegradeerd of gedeactiveerd is.
-  if (!user || user.role !== session.role || user.sessionVersion !== session.v) {
+  try {
+    // Eerst minimale select (login/sessie); photoUrl apart zodat een achterlopende
+    // productiedatabase de hele shell niet platlegt.
+    const user = await prisma.user.findFirst({
+      where: { id: session.userId, active: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        sessionVersion: true,
+        photoUrl: true,
+      },
+    });
+    // Rol én versie moeten kloppen: een token blijft anders geldig nadat een
+    // medewerker gedegradeerd of gedeactiveerd is.
+    if (!user || user.role !== session.role || user.sessionVersion !== session.v) {
+      return null;
+    }
+
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      photoUrl: user.photoUrl ?? null,
+      role: user.role as AppRole,
+    };
+  } catch (err) {
+    console.error("getCurrentUser failed", err);
     return null;
   }
-  return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    photoUrl: user.photoUrl,
-    role: user.role as AppRole,
-  };
 });
 
 export async function requireUser(roles?: readonly AppRole[]) {

@@ -7,6 +7,8 @@ import {
   conversionDisplay,
   countBy,
 } from "@/lib/reporting";
+import { footfallByCamera, footfallByDay } from "@/lib/camera-events";
+import { FootfallChart } from "@/components/FootfallChart";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +40,7 @@ export default async function ReportsPage({
     shopPlacements,
     settings,
     users,
+    cameraEvents,
   ] = await Promise.all([
     prisma.outreachEvent.findMany({
       where: { createdAt: { gte: since } },
@@ -59,6 +62,7 @@ export default async function ReportsPage({
         wonAt: true,
         wonValue: true,
         ownerId: true,
+        grossMargin: true,
       },
     }),
     prisma.auditEvent.findMany({
@@ -105,6 +109,10 @@ export default async function ReportsPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
+    prisma.cameraEvent.findMany({
+      where: { receivedAt: { gte: since } },
+      select: { cameraName: true, occurredAt: true, receivedAt: true },
+    }),
   ]);
 
   const proposalKeys = new Set<string>();
@@ -127,6 +135,13 @@ export default async function ReportsPage({
 
   const calls = outreach.filter((event) => event.type === "CALL");
   const cycleDays = averageCycleDays(wonDeals);
+  const margins = wonDeals
+    .map((deal) => deal.grossMargin)
+    .filter((m): m is number => m != null && Number.isFinite(m));
+  const avgMargin =
+    margins.length > 0
+      ? margins.reduce((sum, m) => sum + m, 0) / margins.length
+      : null;
   const lossReasons = countBy(lostDeals, (deal) => deal.lossReason);
   const sourceRows = cohortRows(leadCohort, (lead) => lead.source);
   const zoneRows = cohortRows(leadCohort, (lead) => lead.province);
@@ -150,6 +165,8 @@ export default async function ReportsPage({
   const ended = shopPlacements.filter(
     (placement) => placement.removedAt && placement.removedAt >= since
   );
+  const dailyFootfall = footfallByDay(cameraEvents, 14);
+  const cameraRows = footfallByCamera(cameraEvents);
   const visibleUsers =
     viewer.role === "admin"
       ? users
@@ -199,7 +216,7 @@ export default async function ReportsPage({
 
       <section className="space-y-3">
         <h2 className="label text-[var(--accent)]">Verkoopfunnel</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
           <Figure label="Gesprekken" value={calls.length} />
           <Figure label="Afspraken geboekt" value={meetings.length} />
           <Figure label="Voorstellen bewaard" value={proposalKeys.size} />
@@ -207,6 +224,14 @@ export default async function ReportsPage({
           <Figure
             label="Gem. doorlooptijd"
             value={cycleDays == null ? "—" : `${Math.round(cycleDays)} d`}
+          />
+          <Figure
+            label="Gem. brutomarge"
+            value={
+              avgMargin == null
+                ? "geen kostprijs"
+                : `${Math.round(avgMargin * 100)}%`
+            }
           />
         </div>
         <p className="text-xs text-[var(--text-dim)]">
@@ -264,6 +289,44 @@ export default async function ReportsPage({
             </ul>
           </div>
         ) : null}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="label text-[var(--accent)]">
+          Cameraverkeer Diksmuide (bèta)
+        </h2>
+        {cameraEvents.length ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Figure label="Persoonsdetecties" value={cameraEvents.length} />
+              <Figure
+                label="Camera's met verkeer"
+                value={cameraRows.length}
+              />
+            </div>
+            <div className="panel p-4">
+              <p className="text-xs text-[var(--text-dim)] mb-2">
+                Laatste 14 dagen
+              </p>
+              <FootfallChart data={dailyFootfall} />
+            </div>
+            <Breakdown
+              title="Per camera"
+              rows={cameraRows.map((row) => ({
+                label: row.label,
+                value: String(row.count),
+              }))}
+              empty="Nog geen cameradata in deze periode."
+            />
+          </>
+        ) : (
+          <p className="text-sm text-[var(--text-dim)] panel p-4">
+            Nog geen cameradata. Koppel een Alarm Manager-webhook in UniFi
+            Protect (trigger: Smart Detect → Persoon) naar{" "}
+            <span className="mono">/api/unifi/webhook?secret=…</span> om
+            voetgangersverkeer per automaat bij te houden.
+          </p>
+        )}
       </section>
 
       <section className="space-y-3">

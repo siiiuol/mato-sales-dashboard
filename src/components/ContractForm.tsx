@@ -23,23 +23,54 @@ type LeadPreview = {
   phone: string | null;
 };
 
+type DealPrefill = {
+  productId: string;
+  qty: number;
+  unitPrice: number;
+} | null;
+
+function initialFromDeal(
+  products: Product[],
+  dealLine: DealPrefill
+): { productId: string; price: string; quantity: string } {
+  if (dealLine && products.some((p) => p.id === dealLine.productId)) {
+    return {
+      productId: dealLine.productId,
+      price: String(dealLine.unitPrice),
+      quantity: String(Math.max(1, dealLine.qty)),
+    };
+  }
+  const first = products[0];
+  return {
+    productId: first?.id ?? "",
+    price: String(first?.listPrice ?? 0),
+    quantity: "1",
+  };
+}
+
 /**
  * Contract maken met live preview terwijl u product, prijs en aantal kiest.
+ *
+ * Start gevuld uit de open deal als die er is — de verkoper mag nog
+ * overschrijven; bij opslaan gaat die prijs terug naar de dealregel.
  */
 export function ContractForm({
   leadId,
   dealId,
   products,
   lead,
+  dealLine = null,
 }: {
   leadId: string;
   dealId?: string | null;
   products: Product[];
   lead: LeadPreview;
+  dealLine?: DealPrefill;
 }) {
-  const [productId, setProductId] = useState(products[0]?.id ?? "");
-  const [price, setPrice] = useState(String(products[0]?.listPrice ?? 0));
-  const [quantity, setQuantity] = useState("1");
+  const initial = initialFromDeal(products, dealLine);
+  const [productId, setProductId] = useState(initial.productId);
+  const [price, setPrice] = useState(initial.price);
+  const [quantity, setQuantity] = useState(initial.quantity);
   const [note, setNote] = useState("");
 
   const chosen = products.find((p) => p.id === productId);
@@ -47,6 +78,11 @@ export function ContractForm({
   const unit = Number(price) || 0;
   const total = unit * qty;
   const { net, vat, gross } = priceBreakdown(total);
+  const fromDeal =
+    Boolean(dealLine) &&
+    dealLine!.productId === productId &&
+    dealLine!.unitPrice === unit &&
+    dealLine!.qty === qty;
 
   const context = useMemo(
     () => ({
@@ -91,8 +127,16 @@ export function ContractForm({
         <input type="hidden" name="leadId" value={leadId} />
         <input type="hidden" name="dealId" value={dealId ?? ""} />
 
+        {dealLine ? (
+          <p className="text-xs text-[var(--text-dim)]">
+            {fromDeal
+              ? "Ingevuld uit de open deal — pas aan als nodig."
+              : "Afwijkend van de deal — bij opslaan wordt de deal bijgewerkt."}
+          </p>
+        ) : null}
+
         <label className="block">
-          <span className="label">Wat verkoop je</span>
+          <span className="label">Product</span>
           <select
             name="productId"
             className="select mt-1"

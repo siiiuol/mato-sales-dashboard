@@ -26,6 +26,8 @@ model Lead {
   establishmentName           String?
   enterpriseName              String?
   source                      String    @default("lead_bot")
+  /// Extra herkomstdetail (bijv. formuliernaam of campagne-UTM van de website).
+  sourceDetail                String?
   sourceVersion               String?
   campaignId                  String?
   score                       Int       @default(0)
@@ -95,12 +97,35 @@ model Lead {
   shopWaitlistEntries ShopWaitlist[]
   campaign     Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
   comments     LeadComment[]
+  facts        CustomerFact[]
+  inboundSubmissions InboundSubmission[]
 
   @@index([claimedById])
   @@index([ownerId])
   @@index([ownerId, status, nextActionAt])
   @@index([complianceStatus, status, nextActionAt])
   @@index([campaignId])
+}
+
+/// Ruwe website-aanvraag. Blijft bewaard zodat een mislukte of dubbele
+/// inzending herverwerkt kan worden zonder de originele payload te verliezen.
+model InboundSubmission {
+  id          String    @id @default(cuid())
+  /// JSON van de oorspronkelijke inzending.
+  payload     String
+  /// website | form | api — waarvandaan.
+  channel     String    @default("website")
+  /// OPEN | LINKED | CREATED | REJECTED
+  status      String    @default("OPEN")
+  leadId      String?
+  error       String?
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: SetNull)
+
+  @@index([status, receivedAt])
+  @@index([leadId])
 }
 
 /// Interne teamchat op een leadfiche — wijzigt de leadstatus niet.
@@ -117,18 +142,56 @@ model LeadComment {
   @@index([leadId, createdAt])
 }
 
+/// Feiten over een klant of lopende zaak — één rij per feit, met bewijs.
+///
+/// Nooit stil als waarheid wegschrijven: SUGGESTED tot iemand bevestigt.
+model CustomerFact {
+  id              String    @id @default(cuid())
+  customerId      String?
+  leadId          String?
+  /// Vaste sleutel uit FACT_KEYS in customer-memory.ts.
+  key             String
+  value           String
+  confidence      Float     @default(1)
+  /// SUGGESTED | CONFIRMED | REJECTED
+  status          String    @default("SUGGESTED")
+  /// MAIL | CALL | MANUAL | DOCUMENT
+  source          String
+  sourceMailId    String?
+  sourceCommentId String?
+  confirmedById   String?
+  confirmedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead        Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  sourceMail  MailMessage? @relation(fields: [sourceMailId], references: [id], onDelete: SetNull)
+  confirmedBy User?        @relation("FactConfirmedBy", fields: [confirmedById], references: [id])
+
+  @@index([customerId, status])
+  @@index([leadId, status])
+  @@index([sourceMailId])
+  @@index([key, status])
+}
+
 /// Elke mail die echt vertrokken of binnengekomen is, per lead.
 ///
 /// Los van EmailDraft: dat is het klad dat bewerkt en weggegooid mag worden,
 /// dit is het bewijs van wat er verstuurd is en wat er terugkwam. Samen met de
 /// belnotities vormt dit de volledige geschiedenis van één zaak.
 model MailMessage {
-  id        String @id @default(cuid())
-  leadId    String
+  id String @id @default(cuid())
+  /// Nullable: mail die we nog niet met zekerheid aan een zaak kunnen hangen
+  /// (triage), of mail van een bestaande klant zonder open lead.
+  leadId     String?
+  customerId String?
   /// Vanuit wiens postvak. Blijft leeg als de medewerker verwijderd is.
-  userId    String?
+  userId String?
   /// UIT of IN — verstuurd door ons, of een antwoord van de prospect.
   direction String @default("OUT")
+  /// INBOX | SENT — uit welk mapje Graph dit kwam.
+  folder String?
 
   subject     String
   body        String @default("")
@@ -147,13 +210,26 @@ model MailMessage {
   conversationId String?
   draftId        String?
 
+  /// gesprek | afzender | klant | domein — leeg bij triage zonder match.
+  matchedBy       String?
+  matchConfidence Float?
+
+  /// Gecachte AI-extractie (JSON); voorkomt dubbele Anthropic-calls.
+  aiExtract     String?
+  aiExtractedAt DateTime?
+
   createdAt DateTime @default(now())
 
-  lead Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  user User? @relation(fields: [userId], references: [id])
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  user     User?     @relation(fields: [userId], references: [id])
+  facts    CustomerFact[]
 
   @@index([leadId])
+  @@index([customerId])
   @@index([conversationId])
+  @@index([userId, direction, occurredAt])
+  @@index([leadId, matchedBy])
 }
 
 model OutreachEvent {
@@ -215,6 +291,9 @@ model Customer {
   documents         GeneratedDocument[]
   machinePlacements MachinePlacement[]
   contentItems      ContentItem[]
+  mail              MailMessage[]
+  facts             CustomerFact[]
+  supplierOrders    SupplierOrder[]
 
   @@index([kind])
   @@index([ownerId])
@@ -275,6 +354,16 @@ model MachinePlacement {
   noticePeriodDays  Int       @default(30)
   /// ACTIVE | NOTICE_SENT | RENEWING | ENDING
   renewalStatus     String    @default("ACTIVE")
+  /// Maandelijkse vaste huur (FIXED / MIX).
+  monthlyFee        Float     @default(0)
+  /// Commissiewaarde in procent (COMMISSION / MIX).
+  commissionPct     Float     @default(0)
+  /// Optioneel minimumomzet voor commissieformules.
+  minimumTurnover   Float     @default(0)
+  /// Eenmalige kost: terminal.
+  terminalCost      Float     @default(0)
+  /// Eenmalige kost: installatie/plaatsing.
+  installCost       Float     @default(0)
   placedAt     DateTime  @default(now())
   removedAt    DateTime?
   status       String    @default("ACTIVE") // ACTIVE | REMOVED
@@ -310,6 +399,12 @@ model Deal {
   expectedValue        Float     @default(0)
   probability          Int       @default(25)
   grossMargin          Float?
+  /// Eenmalige setupkost (transport, installatie, branding…).
+  setupCost            Float     @default(0)
+  /// Maandelijkse kost die bij deze deal hoort (sim, telemetrie…).
+  monthlyCost          Float     @default(0)
+  /// Commissie die over deze deal uitbetaald wordt.
+  commissionCost       Float     @default(0)
   lossReason           String?
   lastActivityAt       DateTime?
 
@@ -332,6 +427,7 @@ model Deal {
   creativeRequests  CreativeRequest[]
   documents         GeneratedDocument[]
   machinePlacements MachinePlacement[]
+  supplierOrders    SupplierOrder[]
 
   @@index([ownerId, stage, expectedCloseAt])
   @@index([stage, updatedAt])
@@ -343,6 +439,8 @@ model DealLine {
   productId String
   qty       Int    @default(1)
   unitPrice Float
+  /// Kostprijs per stuk als momentopname — niet joinen naar Product.cost.
+  unitCost  Float  @default(0)
 
   deal    Deal    @relation(fields: [dealId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id])
@@ -414,6 +512,8 @@ model User {
   documentsApproved GeneratedDocument[] @relation("DocumentApprover")
   mailExamples      MailExample[]
   leadComments      LeadComment[]
+  factsConfirmed    CustomerFact[] @relation("FactConfirmedBy")
+  supplierOrders    SupplierOrder[]
 }
 
 model MailExample {
@@ -767,6 +867,7 @@ model Supplier {
   quotes    SupplierQuote[]
   contacts  Contact[]
   documents GeneratedDocument[]
+  orders    SupplierOrder[]
 }
 
 model SourcingRequest {
@@ -801,6 +902,7 @@ model SourcingRequest {
   requestedBy User?     @relation(fields: [requestedById], references: [id])
   quotes      SupplierQuote[]
   documents   GeneratedDocument[]
+  orders      SupplierOrder[]
 }
 
 model SupplierQuote {
@@ -829,6 +931,39 @@ model SupplierQuote {
 
   request  SourcingRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   supplier Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
+
+/// Bestelling bij een leverancier (Kaigo-handoff en packaging-orders).
+/// Statusketen: DRAFT → SENT → CONFIRMED → SHIPPED → RECEIVED (of CANCELLED).
+model SupplierOrder {
+  id                 String    @id @default(cuid())
+  code               String    @unique
+  title              String
+  /// DRAFT | SENT | CONFIRMED | SHIPPED | RECEIVED | CANCELLED
+  status             String    @default("DRAFT")
+  supplierId         String
+  dealId             String?
+  customerId         String?
+  sourcingRequestId  String?
+  notes              String?
+  orderedAt          DateTime?
+  expectedAt         DateTime?
+  receivedAt         DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  supplier        Supplier         @relation(fields: [supplierId], references: [id])
+  deal            Deal?            @relation(fields: [dealId], references: [id])
+  customer        Customer?        @relation(fields: [customerId], references: [id])
+  sourcingRequest SourcingRequest? @relation(fields: [sourcingRequestId], references: [id])
+  createdBy       User?            @relation(fields: [createdById], references: [id])
+
+  @@index([status, expectedAt])
+  @@index([supplierId])
+  @@index([dealId])
+  @@index([customerId])
+  @@index([sourcingRequestId])
 }
 
 model Task {
@@ -977,6 +1112,10 @@ model MailboxConnection {
   refreshToken String
   expiresAt    DateTime
   scope        String   @default("")
+  /// Laatste geslaagde achtergrondsync (cron of knop).
+  lastSyncAt   DateTime?
+  /// Laatste foutmelding van de sync; leeg na een geslaagde ronde.
+  syncError    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -1012,6 +1151,29 @@ model AuditEvent {
   @@index([entityType, entityId, createdAt])
 }
 
+/// Eén Smart Detect-gebeurtenis (meestal "person") van een UniFi Protect-camera.
+///
+/// Komt binnen via de webhook die de Alarm Manager-regel in UniFi vuurt op elke
+/// persoonsdetectie. Het exacte payload-formaat van UniFi is niet gedocumenteerd,
+/// dus `raw` bewaart het originele JSON-bericht — als een veld hieronder ooit
+/// leeg blijkt te zijn waar het niet zou moeten, staat het bewijs er nog.
+model CameraEvent {
+  id         String    @id @default(cuid())
+  /// Cameranaam zoals in UniFi, bv. "Automaat 5&6" — dient als koppeling naar
+  /// de automaat tot er een echte relatie met MachinePlacement nodig is.
+  cameraName String?
+  cameraId   String?
+  /// Bijna altijd "person"; het veld blijft vrije tekst voor wat UniFi nog meer stuurt.
+  eventType  String    @default("person")
+  /// Tijdstip van de detectie volgens UniFi, niet van ontvangst hier.
+  occurredAt DateTime?
+  receivedAt DateTime  @default(now())
+  raw        String
+
+  @@index([occurredAt])
+  @@index([cameraName, occurredAt])
+}
+
 model AppSettings {
   id                  String @id @default("default")
   businessName        String @default("MATO")
@@ -1035,6 +1197,14 @@ model AppSettings {
   msClientId          String @default("")
   msTenantId          String @default("")
   msClientSecret      String @default("")
+  /// Gedeeld geheim in de webhook-URL die UniFi Protect aanroept bij een
+  /// persoonsdetectie. Staat in de database en niet in een env-var, zodat hij
+  /// zonder nieuwe deploy te draaien is — net als de andere sleutels hierboven.
+  unifiWebhookSecret  String @default("")
+  /// Deelbare livestreams per camera, als regels "naam = url".
+  /// Geen aparte tabel: het is een handvol regels die zelden wijzigen, en
+  /// zo hoeft er voor een extra camera niets aan de database te gebeuren.
+  cameraStreams       String @default("")
   /// Moet gelijk lopen met DEFAULT_DETECTION_CATEGORIES in src/lib/constants.ts.
   detectionCategories String @default("[\"bakery\",\"patisserie\",\"butcher\",\"chocolatier\",\"ice cream\",\"traiteur\",\"cheese\",\"farm shop\",\"takeaway\"]")
   enabledZones        String @default("[\"Antwerpen\",\"Oost-Vlaanderen\",\"West-Vlaanderen\",\"Vlaams-Brabant\",\"Limburg\"]")

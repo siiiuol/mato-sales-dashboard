@@ -20,6 +20,7 @@ import { boundingBoxFilter, withinRadius } from "@/lib/geo";
 import { LeadsMap } from "@/components/LeadsMap";
 import { LeadSearchPanel } from "@/components/LeadSearchPanel";
 import { requirePageUser } from "@/lib/dal";
+import { readEnabledZonesJson } from "@/lib/app-settings";
 import { leadFocusWhere } from "@/lib/today-dashboard";
 import Link from "next/link";
 
@@ -39,6 +40,8 @@ type LeadFilters = {
   km?: string;
   /** Snelle werklijst: vandaag, te laat, stil, zonder actie of triage. */
   focus?: string;
+  /** Mijn zaken, beschikbaar om te claimen, of het hele team. */
+  scope?: string;
 };
 
 /** Straalkeuzes. Meer dan 50 km is in Vlaanderen bijna een hele provincie. */
@@ -74,9 +77,19 @@ export default async function LeadsPage({
     ? Math.min(200, Math.max(1, Number(sp.km) || 15))
     : 0;
   const focusWhere = leadFocusWhere(sp.focus);
+  const searching = Boolean(sp.q?.trim());
+  const scope = searching
+    ? "all"
+    : sp.scope === "open" || sp.scope === "all" || sp.scope === "mine"
+      ? sp.scope
+      : user.role === "admin"
+        ? "all"
+        : "mine";
 
   const where = {
     ...focusWhere,
+    ...(scope === "mine" ? { ownerId: user.id } : {}),
+    ...(scope === "open" ? { ownerId: null } : {}),
     ...(sp.province ? { province: sp.province } : {}),
     ...(sp.status ? { status: sp.status as never } : {}),
     ...(sp.category ? { category: sp.category } : {}),
@@ -92,9 +105,10 @@ export default async function LeadsPage({
   // Met een straal moet er ruimer gehaald worden dan de 200 die getoond worden:
   // het verfijnen gooit nog rijen weg, en anders zouden dat er stilzwijgend
   // minder dan 200 zijn.
-  const take = centre ? 2000 : 200;
+  const take = centre ? 800 : 200;
 
-  const [allLeads, wonLeads, runs, settings, categoryRows, cityRows] = await Promise.all([
+  const [allLeads, wonLeads, runs, enabledZonesJson, categoryRows, cityRows] =
+    await Promise.all([
     prisma.lead.findMany({
       where,
       // Op ranking, net als de bel- en selecteerwachtrij. Met een limiet van
@@ -119,20 +133,16 @@ export default async function LeadsPage({
       take: 200,
     }),
     prisma.detectionRun.findMany({ orderBy: { startedAt: "desc" }, take: 5 }),
-    prisma.appSettings.upsert({
-      where: { id: "default" },
-      update: {},
-      create: { id: "default" },
-    }),
-    prisma.lead.findMany({
+    readEnabledZonesJson(),
+    prisma.lead.groupBy({
+      by: ["category"],
       where: { category: { not: null } },
-      distinct: ["category"],
-      select: { category: true },
+      _count: { _all: true },
     }),
-    prisma.lead.findMany({
+    prisma.lead.groupBy({
+      by: ["city"],
       where: { city: { not: null } },
-      distinct: ["city"],
-      select: { city: true },
+      _count: { _all: true },
     }),
   ]);
 
@@ -156,7 +166,7 @@ export default async function LeadsPage({
   // alle vijf van te maken. Alleen onleesbare instellingen vallen terug.
   let enabledZones: string[] = [...FLANDERS_ZONES];
   try {
-    const parsed: unknown = JSON.parse(settings.enabledZones || "null");
+    const parsed: unknown = JSON.parse(enabledZonesJson || "null");
     if (Array.isArray(parsed)) {
       enabledZones = parsed.filter((z: unknown): z is string =>
         typeof z === "string" && (FLANDERS_ZONES as readonly string[]).includes(z)
@@ -190,18 +200,31 @@ export default async function LeadsPage({
     <div className="space-y-6 anim-lock">
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
         <div>
-          <p className="label">Overzicht</p>
-          <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Leads</h1>
+          <p className="label">Zaken</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold mt-1">Zaken</h1>
           <p className="text-sm text-[var(--text-dim)] mt-1">
-            Zoek per zone in Vlaanderen · {leads.length} in beeld
+            Zoek een bedrijf, open het, of neem het op je naam · {leads.length}{" "}
+            in beeld
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/leads/triage" className="btn btn-primary">
-            Triage-inbox
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href={hrefWith(sp, { scope: "mine" })}
+            className={`badge ${scope === "mine" && !searching ? "badge-live" : ""}`}
+          >
+            Mijn zaken
           </Link>
-          <Link href="/" className="btn">
-            Mijn leads
+          <Link
+            href={hrefWith(sp, { scope: "open" })}
+            className={`badge ${scope === "open" && !searching ? "badge-live" : ""}`}
+          >
+            Beschikbaar
+          </Link>
+          <Link
+            href={hrefWith(sp, { scope: "all" })}
+            className={`badge ${scope === "all" || searching ? "badge-live" : ""}`}
+          >
+            Heel team
           </Link>
         </div>
       </div>

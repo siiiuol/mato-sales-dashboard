@@ -62,6 +62,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
+  // HTML-documenten hebben eigen inline CSS/JS + Google Fonts.
+  if (path.startsWith("/klantdocumenten")) {
+    return NextResponse.next();
+  }
+
   if (process.env.NODE_ENV !== "production") {
     return NextResponse.next();
   }

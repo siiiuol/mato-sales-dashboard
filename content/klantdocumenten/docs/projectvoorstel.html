@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Verkoop voor de aankoop van een automaat, met configuratie en investering.">
+<title>MATO Projectvoorstel</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root{
+  color-scheme:light;
+  --paper:#faf7f1;
+  --soft:#f2ece0;
+  --surface:#ffffff;
+  --ink:#1c1812;
+  --line:rgba(28,24,18,.14);
+  --line-strong:rgba(28,24,18,.28);
+  --gold:#a97a1f;
+  --gold-bright:#c99a3d;
+  --gold-deep:#8a6117;
+  --gold-ink:#5e400a;
+  --gold-wash:rgba(169,122,31,.09);
+  --ink-on-gold:#211a0d;
+  --ok:#1f6b45;
+  --alert:#8f3a12;
+  --shadow:0 8px 22px rgba(28,24,18,.09);
+  --font-display:'Space Grotesk','Segoe UI',sans-serif;
+  --font-body:'Inter','Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono', ui-monospace, 'Cascadia Code', monospace;
+}
+
+*{ box-sizing:border-box; }
+html,body{ margin:0; padding:0; }
+body{
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font-body);
+  -webkit-font-smoothing:antialiased;
+  padding:2.5rem 1rem;
+}
+
+.sheet{
+  width:100%;
+  max-width:47rem;
+  margin:0 auto;
+  background:var(--surface);
+  /* het document zet zijn eigen kleur en lettertype, het erft niets van de pagina eromheen */
+  color:var(--ink);
+  font-family:var(--font-body);
+  border:1px solid var(--line);
+  box-shadow:0 1px 0 rgba(28,24,18,.05), 0 14px 36px rgba(28,24,18,.08);
+}
+
+.band{
+  padding:1.5rem 2.2rem;
+  border-bottom:1px solid var(--line);
+}
+.band.tight{ padding-top:1.4rem; padding-bottom:1.4rem; }
+.band.soft{ background:var(--soft); }
+.band:last-child{ border-bottom:none; }
+
+.eyebrow{
+  font-family:var(--font-body);
+  font-weight:600;
+  font-size:.78rem;
+  letter-spacing:.01em;
+  color:var(--gold-ink);
+  margin:0 0 .4rem;
+}
+
+/* header */
+.header{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:1rem;
+  padding:1.05rem 2.2rem .95rem;
+  border-bottom:2px solid var(--gold);
+}
+.wordmark{ display:flex; align-items:center; gap:.5rem; }
+.wordmark .sq{ width:.45rem; height:.45rem; background:var(--gold); flex:none; }
+.wordmark span{
+  font-family:var(--font-display);
+  font-weight:600; font-size:1.15rem; letter-spacing:0;
+}
+.header .tag{
+  font-family:var(--font-body);
+  font-size:.78rem; letter-spacing:.01em;
+  color:var(--ink); opacity:.62;
+}
+
+/* headings */
+h1{
+  font-family:var(--font-display);
+  font-weight:600;
+  font-size:clamp(1.4rem, 1.15rem + 1.05vw, 1.85rem);
+  line-height:1.2;
+  margin:0 0 .55rem;
+  letter-spacing:-.01em;
+  text-wrap:balance;
+  max-width:34ch;
+}
+h2{
+  font-family:var(--font-display);
+  font-weight:600; font-size:1.12rem; line-height:1.3;
+  margin:0 0 .85rem; text-wrap:balance; max-width:36ch;
+}
+h3{
+  font-family:var(--font-body); font-weight:600;
+  font-size:.82rem; letter-spacing:.01em;
+  color:var(--gold-ink); margin:0 0 .4rem;
+}
+.lede{
+  font-size:.95rem; line-height:1.6; margin:0 0 1.2rem; max-width:56ch;
+}
+.locline{
+  font-family:var(--font-body);
+  font-size:.82rem; opacity:.8; margin:0 0 1.6rem;
+}
+p{ margin:0 0 .9rem; }
+p:last-child{ margin-bottom:0; }
+.body-text{ font-size:.9rem; line-height:1.62; max-width:62ch; }
+.fineprint{
+  font-size:.78rem; line-height:1.5; opacity:.78;
+  margin:.9rem 0 0; max-width:60ch;
+}
+.kicker{
+  font-family:var(--font-display); font-weight:700;
+  font-size:1.05rem; line-height:1.35;
+  margin:1.3rem 0 0; max-width:38ch; text-wrap:balance;
+}
+a{ color:var(--gold-deep); }
+a:focus-visible, button:focus-visible, input:focus-visible,
+[contenteditable]:focus-visible{
+  outline:2px solid var(--gold-deep); outline-offset:2px;
+}
+
+/* invulveld */
+.f{
+  font-family:var(--font-mono);
+  font-size:.92em;
+  color:var(--gold-ink);
+  background:var(--gold-wash);
+  border-bottom:1px dashed var(--gold);
+  padding:.05em .35em;
+  white-space:nowrap;
+}
+.f.wide{ display:inline-block; min-width:14ch; }
+.fline{
+  display:block; border-bottom:1px dashed var(--line-strong);
+  height:1.35rem; margin-top:.35rem;
+}
+
+/* documentkop met nummer en data */
+.docmeta{
+  display:grid;
+  grid-template-columns:repeat(auto-fit, minmax(9rem, 1fr));
+  gap:.9rem 1.4rem;
+  font-family:var(--font-body);
+  font-size:.78rem;
+  font-variant-numeric:tabular-nums;
+}
+.docmeta dt{
+  font-size:.72rem; letter-spacing:.01em; font-weight:600;
+  color:var(--gold-ink); margin:0 0 .2rem;
+}
+.docmeta dd{ margin:0; }
+
+/* partijen */
+.parties{ display:grid; grid-template-columns:1fr 1fr; gap:1.4rem; }
+.party{
+  border:1px solid var(--line); padding:1rem 1.1rem; background:var(--paper);
+}
+.party .who{
+  font-family:var(--font-body); font-size:.72rem; letter-spacing:.01em;
+  font-weight:600; color:var(--gold-ink); margin:0 0 .4rem;
+}
+.party .name{
+  font-family:var(--font-display); font-weight:700; font-size:1rem;
+  margin:0 0 .35rem;
+}
+.party address{
+  font-style:normal; font-size:.82rem; line-height:1.55; opacity:.9;
+}
+
+/* pillen en badges */
+.pillstats{ display:flex; gap:.6rem; flex-wrap:wrap; }
+.pill{
+  font-family:var(--font-body); font-size:.74rem;
+  font-variant-numeric:tabular-nums;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:0; padding:.28rem .6rem; white-space:nowrap;
+}
+.pill.gold{ background:var(--gold-wash); border-color:var(--gold); color:var(--gold-deep); }
+.pill.ok{ color:var(--ok); border-color:rgba(31,107,69,.4); }
+
+/* puntenlijst */
+.points{
+  list-style:none; margin:0; padding:0;
+  display:grid; grid-template-columns:1fr 1fr; gap:.5rem 1.6rem;
+}
+.points li{
+  position:relative; padding-left:1.05rem;
+  font-size:.88rem; line-height:1.45;
+}
+.points li::before{
+  content:""; position:absolute; left:0; top:.45em;
+  width:.42rem; height:.42rem; background:var(--gold-bright);
+}
+.points.single{ grid-template-columns:1fr; }
+.points.single li{ margin-bottom:.15rem; }
+
+/* rollen */
+.roles{ display:grid; grid-template-columns:1fr 1fr; gap:1.4rem; }
+.role ul{ list-style:none; margin:0; padding:0; }
+.role li{
+  font-size:.88rem; line-height:1.5;
+  padding-left:1.05rem; position:relative;
+}
+.role li::before{
+  content:""; position:absolute; left:0; top:.5em;
+  width:.42rem; height:.42rem; background:var(--gold-bright);
+}
+
+/* ticket */
+.ticket{ background:var(--paper); border:1px solid var(--line); max-width:23rem; }
+.ticket.full{ max-width:none; }
+.ticket-compare{
+  display:grid; grid-template-columns:1fr 1fr; gap:1.2rem;
+  align-items:start; margin-bottom:1.2rem;
+}
+.ticket-compare .ticket{ max-width:none; }
+.ticket-head{
+  font-family:var(--font-body); font-size:.72rem; letter-spacing:.02em; font-weight:600;
+  text-align:left; padding:.7rem 1rem .55rem;
+  border-bottom:1px solid var(--line); opacity:.9;
+}
+.ticket-body{ padding:1rem 1.2rem; }
+.trow{
+  display:flex; justify-content:space-between; gap:.75rem;
+  font-family:var(--font-body); font-size:.82rem;
+  padding:.32rem 0; font-variant-numeric:tabular-nums;
+}
+.trow .k{ opacity:.75; }
+.tdiv{ border:none; border-top:1px dashed var(--line); margin:.5rem 0; }
+.trow.total{ font-weight:500; }
+.trow.grand .v{ color:var(--ok); font-weight:600; }
+.ticket-foot{
+  font-size:.76rem; opacity:.8; text-align:center;
+  padding:.7rem 1rem .95rem; border-top:1px dashed var(--line);
+}
+
+/* prijs */
+.price{ display:flex; align-items:baseline; gap:.7rem; margin:.6rem 0; flex-wrap:wrap; }
+.price .amount{
+  font-family:var(--font-display); font-weight:600;
+  font-size:2.15rem; line-height:1.1;
+  color:var(--gold-deep); font-variant-numeric:tabular-nums;
+}
+.price .per{ font-family:var(--font-body); font-size:.95rem; opacity:.82; }
+.price-sub{ font-size:1rem; margin:0 0 1.4rem; }
+.callout{
+  border-left:2px solid var(--ok); padding-left:1rem;
+  margin:0 0 1.4rem; font-size:.92rem; line-height:1.55; max-width:56ch;
+}
+.callout.warn{ border-left-color:var(--alert); }
+.callout.gold{ border-left-color:var(--gold-deep); }
+.callout strong{ font-weight:600; }
+
+/* tabellen */
+.tablewrap{ overflow-x:auto; }
+table.data{
+  width:100%; border-collapse:collapse;
+  color:var(--ink);
+  font-family:var(--font-body); font-size:.8rem;
+  font-variant-numeric:tabular-nums;
+}
+table.data th, table.data td{
+  text-align:right; padding:.5rem .5rem;
+  border-bottom:1px solid var(--line); vertical-align:top;
+}
+table.data th:first-child, table.data td:first-child{ text-align:left; }
+table.data thead th{
+  font-size:.72rem; letter-spacing:.02em; font-weight:600;
+  color:var(--gold-ink); white-space:nowrap;
+}
+table.data tbody tr:last-child td{ border-bottom:none; }
+table.data .hi{ color:var(--ok); font-weight:600; }
+table.data .desc{ font-family:var(--font-body); font-size:.84rem; line-height:1.45; }
+table.data tfoot td{
+  border-bottom:none; border-top:1px solid var(--line-strong);
+  padding-top:.6rem; font-weight:500;
+}
+table.data tfoot tr.grand td{
+  border-top:1px solid var(--line); font-size:.95rem;
+  color:var(--gold-deep); font-weight:600;
+}
+table.data tr.spacer td{ border:none; height:.3rem; padding:0; }
+
+/* artikelen in een overeenkomst */
+.clauses{ counter-reset:art; list-style:none; margin:0; padding:0; }
+.clauses > li{ counter-increment:art; margin:0 0 1.5rem; }
+.clauses > li:last-child{ margin-bottom:0; }
+.clauses > li > .art{
+  font-family:var(--font-mono); font-size:.68rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--gold-deep);
+  margin:0 0 .4rem; display:block;
+}
+.clauses > li > .art::before{ content:"Art. " counter(art, decimal-leading-zero) " · "; }
+.clauses h4{
+  font-family:var(--font-display); font-weight:700; font-size:1rem;
+  margin:0 0 .45rem;
+}
+.clauses p, .clauses li{ font-size:.86rem; line-height:1.6; }
+.clauses ul{ margin:.4rem 0 0; padding-left:1.1rem; }
+.clauses ul li{ margin-bottom:.2rem; }
+
+/* stappen */
+.steps{ list-style:none; counter-reset:step; margin:0; padding:0; display:grid; gap:1.1rem; }
+.steps li{
+  counter-increment:step; position:relative; padding-left:2.4rem;
+}
+.steps li::before{
+  content:counter(step, decimal-leading-zero);
+  position:absolute; left:0; top:.05rem;
+  font-family:var(--font-mono); font-size:.74rem; font-weight:500;
+  color:var(--gold-deep); background:var(--gold-wash);
+  padding:.2rem .4rem; letter-spacing:.02em;
+}
+.steps .st{
+  font-family:var(--font-display); font-weight:700; font-size:.98rem;
+  margin:0 0 .25rem;
+}
+.steps p{ font-size:.86rem; line-height:1.55; margin:0; max-width:52ch; }
+
+/* checklist en formulier */
+.checks{ list-style:none; margin:0; padding:0; display:grid; gap:.55rem; }
+.checks li{ display:flex; align-items:flex-start; gap:.7rem; font-size:.88rem; line-height:1.45; }
+.checkbox{
+  width:.95rem; height:.95rem; flex:none; margin-top:.15rem;
+  border:1px solid var(--line-strong); background:var(--surface);
+}
+.scale{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap; }
+.scale .dot{
+  width:1.6rem; height:1.6rem; border:1px solid var(--line-strong);
+  border-radius:999px; display:grid; place-items:center;
+  font-family:var(--font-mono); font-size:.7rem; opacity:.75;
+}
+.qblock{ margin:0 0 1.4rem; }
+.qblock:last-child{ margin-bottom:0; }
+.qblock .q{ font-size:.9rem; font-weight:500; margin:0 0 .55rem; max-width:56ch; }
+.writein{
+  border:1px solid var(--line); background:var(--paper);
+  height:3.2rem; margin-top:.5rem;
+  background-image:repeating-linear-gradient(
+    var(--surface) 0 0
+  );
+}
+.writein.tall{ height:5rem; }
+
+/* kpi raster */
+.kpis{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(8.5rem,1fr));
+  gap:1px; background:var(--line); border:1px solid var(--line);
+}
+.kpi{ background:var(--surface); padding:1rem 1.1rem; }
+.kpi .kl{
+  font-family:var(--font-body); font-size:.62rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--gold-deep); margin:0 0 .4rem;
+}
+.kpi .kv{
+  font-family:var(--font-display); font-weight:700; font-size:1.75rem;
+  line-height:1; font-variant-numeric:tabular-nums;
+}
+.kpi .kd{ font-size:.74rem; opacity:.8; margin:.4rem 0 0; line-height:1.4; }
+.kpi .kd.up{ color:var(--ok); opacity:1; }
+.kpi .kd.down{ color:var(--alert); opacity:1; }
+
+/* eenvoudige balkgrafiek */
+.bars{ display:grid; gap:.5rem; margin:0; padding:0; }
+.bars .barrow{
+  display:grid; grid-template-columns:5.5rem 1fr 3.5rem; align-items:center; gap:.7rem;
+  font-family:var(--font-body); font-size:.74rem; font-variant-numeric:tabular-nums;
+}
+.bars .track{ background:var(--soft); height:.85rem; }
+.bars .fill{ background:var(--gold-bright); height:100%; }
+.bars .barrow.peak .fill{ background:var(--gold-deep); }
+
+/* handtekeningen */
+.signs{ display:grid; grid-template-columns:1fr 1fr; gap:1.6rem; margin-top:1.6rem; }
+.sign .sl{
+  font-family:var(--font-body); font-size:.64rem; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--gold-deep); margin:0 0 2.6rem;
+}
+.sign .rule{ border-top:1px solid var(--line-strong); }
+.sign .cap{ font-size:.74rem; opacity:.8; margin:.45rem 0 0; line-height:1.45; }
+
+/* specificatiekaarten */
+.speclist{ display:grid; gap:1.4rem; }
+.spec{
+  border:1px solid var(--line); background:var(--paper);
+  display:grid; grid-template-columns:1fr;
+}
+.spec-head{
+  display:flex; justify-content:space-between; align-items:baseline;
+  gap:1rem; flex-wrap:wrap;
+  padding:.9rem 1.1rem; border-bottom:1px solid var(--line);
+  background:var(--surface);
+}
+.spec-head .mn{
+  font-family:var(--font-display); font-weight:700; font-size:1.05rem;
+}
+.spec-head .mp{
+  font-family:var(--font-mono); font-size:.8rem; color:var(--gold-deep);
+  font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.spec-body{ padding:1rem 1.1rem; display:grid; gap:.8rem; }
+.spec-body p{ font-size:.86rem; line-height:1.55; margin:0; max-width:58ch; }
+.spec-body .dims{
+  font-family:var(--font-mono); font-size:.74rem; opacity:.82;
+  font-variant-numeric:tabular-nums;
+}
+.spec-body ul{ list-style:none; margin:0; padding:0; display:grid; gap:.3rem; }
+.spec-body ul li{
+  position:relative; padding-left:1rem; font-size:.84rem; line-height:1.45;
+}
+.spec-body ul li::before{
+  content:""; position:absolute; left:0; top:.5em;
+  width:.38rem; height:.38rem; background:var(--gold-bright);
+}
+.spec.soon{ opacity:.72; }
+.spec.soon .mp{ color:var(--ink); opacity:.7; }
+
+/* cta band */
+.cta{ background:var(--gold-deep); color:var(--paper); }
+.cta h2{ color:var(--paper); max-width:26ch; }
+.cta h1{ color:var(--paper); }
+.cta .eyebrow{ color:var(--paper); }
+.cta p{ font-size:.92rem; line-height:1.55; max-width:38ch; opacity:.92; }
+.cta-row{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; margin-top:1.4rem; }
+.cta-btn{
+  font-family:var(--font-body); font-size:.82rem; letter-spacing:.01em; font-weight:600;
+  background:var(--paper); color:var(--ink-on-gold);
+  border-radius:0; padding:.5rem 1rem;
+  text-decoration:none; display:inline-block;
+}
+.cta-btn.ghost{
+  background:transparent; color:var(--paper);
+  border:1px solid rgba(250,247,241,.5);
+}
+/* niet op .cta-btn: die heeft een papieren vlak en dus donkere letters nodig */
+.cta a:not(.cta-btn){ color:var(--paper); }
+.cta a:focus-visible, .cta-btn:focus-visible{
+  outline:2px solid var(--paper); outline-offset:3px;
+}
+.cta-legal{
+  font-family:var(--font-body); font-size:.66rem; line-height:1.6;
+  color:var(--paper); opacity:.9;
+  margin:1.5rem 0 0; padding-top:1rem;
+  border-top:1px solid rgba(250,247,241,.25);
+}
+.cta-legal a{ color:inherit; }
+
+/* leveranciersvermelding, bewust klein */
+.supplier{
+  display:flex; align-items:flex-start; gap:.6rem;
+  margin:1.2rem 0 0; padding-top:.9rem;
+  border-top:1px solid var(--line);
+}
+.supplier .mark{
+  font-family:var(--font-display); font-weight:700;
+  font-size:.62rem; letter-spacing:.06em; text-transform:uppercase;
+  color:var(--ink); opacity:.72;
+  border:1px solid var(--line-strong); padding:.25rem .4rem;
+  white-space:nowrap; flex:none; line-height:1;
+}
+.supplier p{
+  margin:0; font-size:.7rem; line-height:1.55; opacity:.78; max-width:56ch;
+}
+.cta .supplier{ border-top-color:rgba(250,247,241,.25); }
+.cta .supplier .mark{ color:var(--paper); opacity:.7; border-color:rgba(250,247,241,.4); }
+.cta .supplier p{ color:var(--paper); opacity:.72; }
+
+/* voettekst op documenten zonder cta */
+.footnote{
+  font-family:var(--font-body); font-size:.66rem; line-height:1.6;
+  opacity:.8; margin:0;
+}
+
+@media (max-width:600px){
+  .points, .roles, .parties, .signs, .ticket-compare{ grid-template-columns:1fr; }
+  .band, .header{ padding-left:1.3rem; padding-right:1.3rem; }
+  .price .amount{ font-size:3.4rem; }
+  .bars .barrow{ grid-template-columns:4.5rem 1fr 3rem; }
+}
+
+@media print{
+  @page{ size:A4; margin:12mm; }
+  html{ font-size:15px; }
+  body{
+    padding:0; background:var(--surface);
+    print-color-adjust:exact; -webkit-print-color-adjust:exact;
+  }
+  .sheet{ box-shadow:none; max-width:none; }
+  .band{ padding:1.05rem 0; }
+  .header{ padding:0 0 .9rem; }
+  .cta{ padding:1.2rem 1.4rem; }
+  .band, .header{ border-color:var(--line); }
+  .ticket, .party, .kpi, .spec, .sign, .steps li,
+  .clauses > li, .callout, .qblock, .barrow{ break-inside:avoid; }
+  h1, h2, h3, .eyebrow{ break-after:avoid; }
+  p{ orphans:3; widows:3; }
+  .points li, .role li, table.data tr{ break-inside:avoid; }
+  .pagebreak{ break-before:page; }
+  .noprint{ display:none !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="sheet">
+
+  <div class="header">
+    <div class="wordmark"><span class="sq"></span><span>MATO</span></div>
+    <div class="tag">Voorstel</div>
+  </div>
+
+<div class="band soft">
+    <p class="eyebrow">Verkoop</p>
+    <h1>Projectvoorstel</h1>
+    <p class="locline">Voor <span class="f wide">[Naam klant / bedrijf]</span> &middot; <span class="f">[dd/mm/jjjj]</span></p>
+
+    <dl class="docmeta">
+      <div><dt>Voorstelnummer</dt><dd><span class="f">[VP 00000/0]</span></dd></div>
+      <div><dt>Project</dt><dd><span class="f">[naam project]</span></dd></div>
+      <div><dt>Geldig tot</dt><dd><span class="f">[dd/mm/jjjj]</span></dd></div>
+      <div><dt>Contactpersoon</dt><dd><span class="f">[naam]</span></dd></div>
+    </dl>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Partijen</p>
+    <div class="parties">
+      <div class="party">
+        <p class="who">Projectbegeleiding</p>
+        <p class="name">MATO Automaat BV</p>
+        <address>
+          Roeselaarseweg 69, 8820 Torhout<br>
+          BTW BE 1027.766.963<br>
+          +32 486 15 92 09<br>
+          info@matoautomaat.be
+        </address>
+      </div>
+      <div class="party">
+        <p class="who">Klant</p>
+        <p class="name"><span class="f">[Bedrijfsnaam]</span></p>
+        <address>
+          <span class="f">[Straat en nummer]</span><br>
+          <span class="f">[Postcode en gemeente]</span><br>
+          BTW <span class="f">[BE 0000.000.000]</span>
+        </address>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Configuratie</p>
+    <h2>MATO M1 voedingsautomaat</h2>
+    <ul class="points single">
+      <li>Gekoelde M1-automaat, geschikt voor <span class="f">[producttype]</span> en maaltijden</li>
+      <li>Zachte liftuitgifte, producten worden gecontroleerd naar het uitgiftevak gebracht</li>
+      <li>Koeling van +2&deg;C tot +20&deg;C, instelbaar per producttype</li>
+      <li>Tot 42 maaltijdboxen, of 24 grote en 12 kleine broden</li>
+      <li>Logo en branding op de automaat</li>
+      <li>Eerste configuratie en indeling van de automaat</li>
+      <li>Opstartbegeleiding door MATO Automaat BV</li>
+      <li>Twee jaar technische garantie</li>
+    </ul>
+    <p class="fineprint">197 &times; 104 &times; 79 cm, circa 300 kg. Optioneel: bancontact, spiralen, telemetrie, personalisatie en buitenbehuizing. De locatie bepaalt u zelf, rekening houdend met de technische plaatsingsvoorwaarden.</p>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Betaling</p>
+    <div class="roles">
+      <div class="role">
+        <h3>Payter Apollo betaalterminal</h3>
+        <ul>
+          <li>Contactloze terminal voor kaart- en mobiele betalingen</li>
+          <li>Gekoppeld aan de automaat</li>
+          <li>Activering en transactieverwerking volgens de afzonderlijke voorwaarden en tarieven van Payter en de betaalverwerker</li>
+        </ul>
+      </div>
+      <div class="role">
+        <h3>Televend telemetriesysteem</h3>
+        <ul>
+          <li>Realtime voorraadbeheer en omzetopvolging</li>
+          <li>Initiële koppeling en opstartbegeleiding</li>
+          <li>Doorlopende licentie-, SIM- en softwarekosten zijn niet in de aankoopprijs inbegrepen</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Investering</p>
+    <div class="tablewrap">
+      <table class="data">
+        <thead>
+          <tr>
+            <th scope="col">Omschrijving</th>
+            <th scope="col">Aantal</th>
+            <th scope="col">Eenheidsprijs</th>
+            <th scope="col">Btw</th>
+            <th scope="col">Totaal</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><strong>MATO M1 voedingsautomaat</strong></td><td>1</td><td>10.500,00</td><td>21 %</td><td>10.500,00</td></tr>
+          <tr><td><strong>Payter Apollo terminal</strong></td><td>1</td><td>950,00</td><td>21 %</td><td>950,00</td></tr>
+          <tr><td><strong>Televend telemetriesysteem</strong></td><td>1</td><td>450,00</td><td>21 %</td><td>450,00</td></tr>
+          <tr><td><strong><span class="f">[Optie]</span></strong></td><td><span class="f">[1]</span></td><td><span class="f">[0,00]</span></td><td>21 %</td><td><span class="f">[0,00]</span></td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td colspan="4">Totaal excl. btw</td><td>11.900,00</td></tr>
+          <tr><td colspan="4">Btw 21 %</td><td>2.499,00</td></tr>
+          <tr class="grand"><td colspan="4">Totale investering incl. btw</td><td>14.399,00</td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="fineprint">Alle bedragen in euro. Pas de lijnen en totalen aan per project. Wijzigingen aan de configuratie, branding, betaaloplossing, telemetrie, levering of plaatsingsomstandigheden kunnen na schriftelijke bevestiging aanleiding geven tot een aangepaste prijs.</p>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Planning</p>
+    <ol class="steps">
+      <li>
+        <p class="st">Bevestiging van configuratie en vakindeling</p>
+        <p>Wij leggen samen vast welke producten in welk vak komen en welke instellingen daarbij horen.</p>
+      </li>
+      <li>
+        <p class="st">Uitwerking en goedkeuring van de branding</p>
+        <p>U keurt het ontwerp van logo en stickers goed voor de productie start.</p>
+      </li>
+      <li>
+        <p class="st">Productie en technische voorbereiding</p>
+        <p>De automaat wordt geconfigureerd en klaargemaakt voor uw assortiment.</p>
+      </li>
+      <li>
+        <p class="st">Levering, plaatsing en opstartbegeleiding</p>
+        <p>De automaat wordt geplaatst en samen met u in gebruik genomen.</p>
+      </li>
+    </ol>
+    <p class="fineprint">De definitieve leverings- en plaatsingsdatum hangt af van de beschikbaarheid van de apparatuur en de voorbereiding van de locatie.</p>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Garantie</p>
+    <div class="roles">
+      <div class="role">
+        <h3>Twee jaar technische garantie</h3>
+        <ul>
+          <li>Jaar één: onderdelen, werkuren en verplaatsingskosten</li>
+          <li>Jaar twee: uitsluitend onderdelen</li>
+          <li>Niet gedekt: onderhoud, reiniging, normale slijtage, verbruiksgoederen</li>
+          <li>Evenmin gedekt: verkeerd gebruik, weersinvloeden, vandalisme of ingrepen door derden</li>
+        </ul>
+      </div>
+      <div class="role">
+        <h3>Wat u voorziet</h3>
+        <ul>
+          <li>Een geschikte, stabiele en bereikbare plaatsingslocatie</li>
+          <li>De vereiste elektriciteits- en netwerkvoorzieningen</li>
+          <li>Bij buitenopstelling: duurzame bescherming tegen regen, wind en insijpelend water</li>
+          <li>Naleving van de regels rond voedselveiligheid, allergenen en gereglementeerde producten</li>
+        </ul>
+      </div>
+    </div>
+    <p class="fineprint">Payter, Televend, betaalverwerkers en telecomoperatoren zijn zelfstandige externe dienstverleners. Hun abonnementen, transactiekosten, licenties en SIM-kosten zijn niet in de aankoopprijs inbegrepen en worden rechtstreeks door hen aangerekend.</p>
+  </div>
+
+  <div class="band">
+    <p class="eyebrow">Vervolg</p>
+    <p class="body-text">Na uw bevestiging reserveren wij de automaat en starten wij onmiddellijk met de voorbereiding van uw concept. Dit voorstel blijft 30 dagen geldig vanaf de vermelde datum. Na schriftelijke goedkeuring bezorgen wij de definitieve verkoopovereenkomst ter ondertekening.</p>
+    <div class="signs">
+      <div class="sign">
+        <p class="sl">Voor MATO Automaat BV</p>
+        <div class="rule"></div>
+        <p class="cap">Naam, datum en handtekening</p>
+      </div>
+      <div class="sign">
+        <p class="sl">Voor akkoord, de klant</p>
+        <div class="rule"></div>
+        <p class="cap">Naam, datum en handtekening, voorafgegaan door "gelezen en goedgekeurd"</p>
+      </div>
+    </div>
+    <div class="supplier">
+      <span class="mark">Kai Go Vending</span>
+      <p>Onze vaste leverancier voor automaten, betaalterminals en telemetrie. Kai Go Vending staat in voor levering, onderhoud, herstellingen en garantie. MATO Automaat BV begeleidt uw project en blijft uw aanspreekpunt.</p>
+    </div>
+  </div>
+
+<div class="band cta">
+    <p class="eyebrow">Vervolg</p>
+    <h2>Bevestiging</h2>
+    <p>Bevestig dit voorstel of stel uw vragen. Wij nemen dezelfde week contact op om de configuratie vast te leggen.</p>
+    <div class="cta-row">
+      <a class="cta-btn" href="mailto:info@matoautomaat.be">info@matoautomaat.be</a>
+      <a class="cta-btn ghost" href="tel:+32486159209">+32 486 15 92 09</a>
+      <a class="cta-btn ghost" href="https://matoautomaat.be">matoautomaat.be</a>
+    </div>
+    <p class="cta-legal">
+      MATO Automaat BV &middot; BTW BE 1027.766.963 &middot; IBAN BE54 7350 7301 3197<br>
+      Maatschappelijke zetel: Roeselaarseweg 69, 8820 Torhout<br>
+      MATO Automatenshop: IJzerlaan 13, 8600 Diksmuide, 24/7 toegankelijk
+    </p>
+  </div>
+
+</div>
+
+</body>
+</html>

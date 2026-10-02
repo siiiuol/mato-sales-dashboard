@@ -11,6 +11,7 @@
 
 export type CadenceKey =
   | "LEAD_FOLLOWUP"
+  | "PROPOSAL_NO_REPLY"
   | "CUSTOMER_ONBOARDING"
   | "INSTALL_HANDOFF"
   | "SHOP_RENEWAL";
@@ -24,11 +25,20 @@ export type CadenceStepDef = {
 /**
  * Dagoffsets zijn een voorstel, geen wet — één array in één bestand, makkelijk
  * bij te stellen zonder ergens anders iets te moeten aanpassen.
+ *
+ * PROPOSAL_NO_REPLY is strakker dan LEAD_FOLLOWUP: een verstuurd voorstel is
+ * het moment waarop een deal stilvalt, dus eerder en vaker bellen.
  */
 export const CADENCES: Record<CadenceKey, CadenceStepDef[]> = {
   LEAD_FOLLOWUP: [
     { step: 1, afterDays: 5, title: "Opvolgen — geen reactie op eerste mail" },
     { step: 2, afterDays: 14, title: "Laatste poging voor je deze zaak loslaat" },
+  ],
+  PROPOSAL_NO_REPLY: [
+    { step: 1, afterDays: 2, title: "Opvolgen — voorstel verstuurd, nog geen antwoord" },
+    { step: 2, afterDays: 5, title: "Tweede poging na voorstel" },
+    { step: 3, afterDays: 10, title: "Bel — voorstel dreigt stil te vallen" },
+    { step: 4, afterDays: 21, title: "Laatste check voor je het voorstel laat liggen" },
   ],
   CUSTOMER_ONBOARDING: [
     { step: 1, afterDays: 7, title: "Nazorg — eerste week: alles naar wens?" },
@@ -44,6 +54,12 @@ export const CADENCES: Record<CadenceKey, CadenceStepDef[]> = {
     { step: 1, afterDays: 0, title: "Shopcontract: verlenging bespreken" },
   ],
 };
+
+/** Cadansen die stil moeten als er echt contact is (antwoord, belnotitie). */
+export const CONTACT_STOP_CADENCES: readonly CadenceKey[] = [
+  "LEAD_FOLLOWUP",
+  "PROPOSAL_NO_REPLY",
+];
 
 /** UTC, om dezelfde reden als de daggrens in `tasks.ts`: geen server-tijdzone-afhankelijkheid. */
 export function addDays(base: Date, days: number): Date {

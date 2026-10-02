@@ -11,9 +11,9 @@ import { catalogPromptBlock, suggestMachineHint } from "./mato-catalog";
 import { draftMail, AnthropicConfigError } from "./anthropic";
 import { formObject, idSchema } from "./validation";
 import { accessTokenFor, disconnectMailbox, MailboxError } from "./mailbox";
-import { fetchInbox, GraphError, sendMail } from "./graph";
-import { matchReplies, normaliseAddress } from "./reply-match";
-import { enrollLeadFollowup, cancelCadence } from "./cadence-actions";
+import { GraphError, sendMail } from "./graph";
+import { enrollLeadFollowup } from "./cadence-actions";
+import { syncMailboxForUser } from "./mail-sync";
 import { readSettingSecret } from "./settings-secrets";
 import { SecretError } from "./secrets";
 import { fetchWebsiteText } from "./website-research";
@@ -38,6 +38,8 @@ export type MailSyncState = {
   error?: string;
   checked?: boolean;
   added?: number;
+  /** Berichten bewaard zonder lead/klant — voor latere triage. */
+  unmatched?: number;
   /** Berichten die wel pasten maar niet weggeschreven konden worden. */
   failed?: number;
   /** Er stond meer klaar dan in één ronde paste. */
@@ -335,6 +337,7 @@ export async function sendMailDraft(
         leadId: draft.leadId,
         userId: user.id,
         direction: "OUT",
+        folder: "SENT",
         subject: input.data.subject,
         body: input.data.body,
         // Het adres van het eigen postvak is betrouwbaarder dan wat Graph
@@ -345,6 +348,8 @@ export async function sendMailDraft(
         graphMessageId: sent.graphMessageId,
         conversationId: sent.conversationId,
         draftId: draft.id,
+        matchedBy: "afzender",
+        matchConfidence: 1,
       },
     });
 
@@ -391,173 +396,38 @@ export async function sendMailDraft(
 }
 
 /**
- * Haalt nieuwe antwoorden op en zet ze bij de juiste lead.
+ * Haalt nieuwe mail op (Postvak IN + Verzonden) en zet ze bij de juiste lead.
  *
- * Handmatig aangeroepen vanaf de leadfiche. Een achtergrondtaak zou netter
- * zijn, maar die vraagt een planner die er nog niet is; zo werkt het al wel.
+ * Handmatig vanaf de leadfiche; de cron doet hetzelfde op de achtergrond.
  */
 export async function syncReplies(): Promise<MailSyncState> {
   const user = await requireUser(["admin", "sales"]);
 
-  const connection = await prisma.mailboxConnection.findUnique({
-    where: { userId: user.id },
-    select: { createdAt: true },
+  const result = await syncMailboxForUser(user.id, {
+    asAdmin: user.role === "admin",
   });
-  if (!connection) {
-    return { error: "Je mailbox is nog niet gekoppeld." };
+
+  if (result.error) {
+    return { error: result.error };
   }
 
-  // Niet verder terugkijken dan de koppeling bestaat, en niet verder dan een
-  // maand: alles daarvoor is oude post die niemand op de tijdlijn verwacht.
-  const lastStored = await prisma.mailMessage.findFirst({
-    where: { userId: user.id, direction: "IN" },
-    orderBy: { occurredAt: "desc" },
-    select: { occurredAt: true },
-  });
-  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const since = new Date(
-    Math.max(
-      lastStored?.occurredAt.getTime() ?? 0,
-      connection.createdAt.getTime(),
-      monthAgo.getTime()
-    )
-  );
-
-  try {
-    const token = await accessTokenFor(user.id);
-    const { messages: incoming, truncated } = await fetchInbox({
-      accessToken: token,
-      since,
+  if (result.added || result.unmatched) {
+    await audit(user.id, "mail.replies_synced", "user", user.id, {
+      added: result.added,
+      unmatched: result.unmatched,
     });
-    if (!incoming.length) return { checked: true, added: 0, truncated };
-
-    /**
-     * Alleen wat déze medewerker mag aanraken.
-     *
-     * Zonder deze afbakening kan een mail uit zijn eigen postvak op de lead van
-     * een collega belanden — die leest hem dan integraal, terwijl hij nooit aan
-     * die medewerker gericht was. Andersom verdwijnt een antwoord op andermans
-     * fiche en wacht de juiste persoon voor niets.
-     *
-     * De beheerder houdt het volledige zicht; hij mag sowieso overal bij.
-     */
-    const mine =
-      user.role === "admin"
-        ? {}
-        : { OR: [{ ownerId: user.id }, { ownerId: null }] };
-
-    const [ourMessages, leadsWithEmail] = await Promise.all([
-      prisma.mailMessage.findMany({
-        where: {
-          conversationId: { not: null },
-          ...(user.role === "admin" ? {} : { userId: user.id }),
-        },
-        select: { conversationId: true, leadId: true },
-      }),
-      prisma.lead.findMany({
-        where: { email: { not: null }, ...mine },
-        select: { id: true, email: true },
-      }),
-    ]);
-
-    const known = await prisma.mailMessage.findMany({
-      where: { graphMessageId: { in: incoming.map((m) => m.graphMessageId) } },
-      select: { graphMessageId: true },
-    });
-
-    const matches = matchReplies(incoming, {
-      conversationLeads: new Map(
-        ourMessages
-          .filter((m): m is typeof m & { conversationId: string } =>
-            Boolean(m.conversationId)
-          )
-          .map((m) => [m.conversationId, m.leadId])
-      ),
-      leadEmails: new Map(
-        leadsWithEmail
-          .filter((l) => l.email)
-          .map((l) => [normaliseAddress(l.email as string), l.id])
-      ),
-      knownMessageIds: new Set(
-        known.map((m) => m.graphMessageId).filter((id): id is string => Boolean(id))
-      ),
-    });
-
-    if (!matches.length) return { checked: true, added: 0, truncated };
-
-    const byId = new Map(incoming.map((m) => [m.graphMessageId, m]));
-    let added = 0;
-    let failed = 0;
-    const touched = new Set<string>();
-
-    for (const match of matches) {
-      const message = byId.get(match.graphMessageId);
-      if (!message) continue;
-      try {
-        await prisma.mailMessage.create({
-          data: {
-            leadId: match.leadId,
-            userId: user.id,
-            direction: "IN",
-            subject: message.subject,
-            body: message.body.slice(0, 20_000),
-            fromAddress: message.from,
-            toAddress: message.to,
-            occurredAt: message.receivedAt,
-            graphMessageId: message.graphMessageId,
-            conversationId: message.conversationId,
-          },
-        });
-        added++;
-        touched.add(match.leadId);
-      } catch (err) {
-        // Alleen een dubbele sleutel is gewoon: twee rondes tegelijk willen
-        // hetzelfde antwoord opslaan, de tweede verliest. Al het andere — een
-        // vergrendelde database, een verbroken verbinding — is een echte fout
-        // en mag niet stilletjes een antwoord laten verdwijnen.
-        if (isDuplicateKey(err)) continue;
-        console.error("antwoord kon niet opgeslagen worden", err);
-        failed++;
-      }
-    }
-
-    // Een antwoord is binnen; de opvolgreeks die daarop wachtte hoeft niet meer.
-    for (const leadId of touched) {
-      revalidatePath(`/leads/${leadId}`);
-      await cancelCadence({ leadId }, "LEAD_FOLLOWUP").catch((err) =>
-        console.error("kon opvolgreeks niet annuleren", err)
-      );
-    }
-    if (touched.size) revalidatePath("/taken");
-    if (added) await audit(user.id, "mail.replies_synced", "user", user.id, { added });
-
-    return { checked: true, added, failed, truncated };
-  } catch (err) {
-    if (
-      err instanceof MailboxError ||
-      err instanceof GraphError ||
-      err instanceof SecretError
-    ) {
-      return { error: err.message };
-    }
-    throw err;
+    revalidatePath("/leads");
+    revalidatePath("/taken");
+    revalidatePath("/");
   }
-}
 
-/**
- * Herkent alleen de botsing op een unieke sleutel.
- *
- * Prisma's foutcode P2002. Zonder deze controle zou elk ander mankement — een
- * vergrendelde SQLite, een verbroken verbinding — er precies zo uitzien als een
- * dubbel bericht, en dan verdwijnt er stil een antwoord van een prospect.
- */
-function isDuplicateKey(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "P2002"
-  );
+  return {
+    checked: true,
+    added: result.added,
+    unmatched: result.unmatched,
+    failed: result.failed,
+    truncated: result.truncated,
+  };
 }
 
 /** Verbreekt de koppeling; de tokens worden verwijderd, de geschiedenis blijft. */

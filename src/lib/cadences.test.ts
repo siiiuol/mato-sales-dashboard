@@ -60,6 +60,22 @@ test("step numbers within one cadence are unique and start at 1", () => {
   }
 });
 
+test("PROPOSAL_NO_REPLY has four steps and starts on day 2", () => {
+  const steps = stepsFor("PROPOSAL_NO_REPLY", start);
+  assert.equal(steps.length, 4);
+  assert.equal(steps[0].dueAt.toISOString(), "2026-08-20T09:00:00.000Z");
+  assert.equal(steps[3].dueAt.toISOString(), "2026-09-08T09:00:00.000Z");
+  assert.ok(steps.every((s) => s.title.length > 0));
+});
+
+test("CONTACT_STOP_CADENCES covers the two lead follow-up series", async () => {
+  const { CONTACT_STOP_CADENCES } = await import("./cadences");
+  assert.deepEqual([...CONTACT_STOP_CADENCES], [
+    "LEAD_FOLLOWUP",
+    "PROPOSAL_NO_REPLY",
+  ]);
+});
+
 test("stepsFor defaults to now when no start is given", () => {
   const before = Date.now();
   const [first] = stepsFor("LEAD_FOLLOWUP");
