@@ -12,6 +12,7 @@ import { draftMail, AnthropicConfigError } from "./anthropic";
 import { formObject, idSchema } from "./validation";
 import { accessTokenFor, disconnectMailbox, MailboxError } from "./mailbox";
 import { GraphError, sendMail } from "./graph";
+import { renderMatoMail } from "./mail-html";
 import { enrollLeadFollowup } from "./cadence-actions";
 import { syncMailboxForUser } from "./mail-sync";
 import { readSettingSecret } from "./settings-secrets";
@@ -312,6 +313,10 @@ export async function sendMailDraft(
       to: input.data.to,
       subject: input.data.subject,
       body: input.data.body,
+      // Dezelfde tekst, in de huisstijl van matoautomaat.be. `body` gaat mee
+      // als platte versie, zodat wat opgeslagen en teruggelezen wordt de tekst
+      // blijft die de medewerker heeft nagelezen.
+      html: renderMatoMail({ body: input.data.body, senderName: user.name }),
     });
   } catch (err) {
     // Niets vertrokken: het concept mag terug in de wachtrij.
@@ -454,4 +459,92 @@ export async function deleteMailDraft(draftId: string): Promise<MailSendState> {
   await audit(user.id, "mail.discarded", "lead", found.draft.leadId, { draftId: id });
   revalidatePath(`/leads/${found.draft.leadId}`);
   return {};
+}
+
+export type DirectMailState = { error?: string; ok?: boolean; sentTo?: string };
+
+/**
+ * Verstuurt een losse mail, zonder lead en zonder AI.
+ *
+ * Tot nu kon er alleen gemaild worden vanaf een leadfiche, via een concept dat
+ * de AI schreef. Een gewoon bericht — een vraag aan een leverancier, een
+ * antwoord aan een klant zonder open lead — moest dus buiten MATO OS om, en
+ * kwam daardoor zonder huisstijl aan en zonder spoor in het dossier.
+ *
+ * De mail wordt opgeslagen met `leadId: null`, wat het veld uitdrukkelijk
+ * toestaat, zodat hier geen databankwijziging voor nodig is.
+ */
+export async function sendDirectMail(
+  _prev: DirectMailState,
+  formData: FormData
+): Promise<DirectMailState> {
+  const user = await requireUser(["admin", "sales"]);
+  const input = z
+    .object({
+      to: z.string().trim().email("Geen geldig mailadres"),
+      subject: z.string().trim().min(1, "Onderwerp ontbreekt").max(300),
+      body: z.string().trim().min(1, "De mail is leeg").max(20_000),
+    })
+    .safeParse(formObject(formData));
+
+  if (!input.success) {
+    return { error: input.error.issues[0]?.message ?? "Controleer de gegevens" };
+  }
+
+  let sent;
+  try {
+    const token = await accessTokenFor(user.id);
+    sent = await sendMail({
+      accessToken: token,
+      to: input.data.to,
+      subject: input.data.subject,
+      body: input.data.body,
+      html: renderMatoMail({ body: input.data.body, senderName: user.name }),
+    });
+  } catch (err) {
+    if (
+      err instanceof MailboxError ||
+      err instanceof GraphError ||
+      err instanceof SecretError
+    ) {
+      return { error: err.message };
+    }
+    throw err;
+  }
+
+  // Vanaf hier heeft de ontvanger de mail. Wat hierna misgaat mag nooit als
+  // "niet verstuurd" op het scherm komen, anders stuurt de medewerker hem
+  // opnieuw. Wel luid in het logboek: stil wegslikken is precies hoe een fout
+  // maanden onopgemerkt blijft.
+  try {
+    await prisma.mailMessage.create({
+      data: {
+        leadId: null,
+        userId: user.id,
+        direction: "OUT",
+        folder: "SENT",
+        subject: input.data.subject,
+        body: input.data.body,
+        fromAddress: sent.from,
+        toAddress: input.data.to,
+        occurredAt: sent.sentAt,
+        graphMessageId: sent.graphMessageId,
+        conversationId: sent.conversationId,
+        matchedBy: "losse mail",
+        matchConfidence: 1,
+      },
+    });
+    await audit(user.id, "mail.sent_direct", "mail", sent.graphMessageId ?? undefined, {
+      to: input.data.to,
+      subject: input.data.subject,
+    });
+  } catch (err) {
+    console.error(
+      "Losse mail verstuurd maar niet opgeslagen:",
+      err instanceof Error ? err.message : err
+    );
+  }
+
+  revalidatePath("/mail");
+  return { ok: true, sentTo: input.data.to };
 }

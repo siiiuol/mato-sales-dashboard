@@ -76,11 +76,18 @@ export async function sendMail({
   to,
   subject,
   body,
+  html,
 }: {
   accessToken: string;
   to: string;
   subject: string;
   body: string;
+  /**
+   * De opgemaakte versie van `body`. Staat die er, dan vertrekt de mail als
+   * HTML; zonder valt hij terug op platte tekst, zodat een aanroeper die geen
+   * opmaak wil niets hoeft te veranderen.
+   */
+  html?: string | null;
 }): Promise<SentMessage> {
   const created = await graph<{
     id: string;
@@ -90,9 +97,12 @@ export async function sendMail({
     method: "POST",
     body: JSON.stringify({
       subject,
-      // Tekst, geen HTML: de mail is door een mens geschreven en nagelezen als
-      // tekst, en zo komt hij ook aan.
-      body: { contentType: "Text", content: body },
+      // Opgemaakt als er opmaak is meegegeven. De woorden blijven die van de
+      // schrijver — `html` is dezelfde tekst in de huisstijl, niet een andere
+      // boodschap. Zonder opmaak gaat hij als platte tekst, zoals voorheen.
+      body: html
+        ? { contentType: "HTML", content: html }
+        : { contentType: "Text", content: body },
       toRecipients: [{ emailAddress: { address: to } }],
     }),
   });
