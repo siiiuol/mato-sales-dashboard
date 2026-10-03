@@ -5,7 +5,6 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { audit, requireUser } from "./dal";
 import {
-  FACT_KEYS,
   isFactKey,
   normaliseFactValue,
 } from "./customer-memory";

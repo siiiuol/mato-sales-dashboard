@@ -20,18 +20,20 @@ jobs:
       CRON_SECRET: ${{ secrets.CRON_SECRET }}
       MATO_BASE_URL: ${{ secrets.MATO_BASE_URL }}
     steps:
+      # Faalt met opzet in plaats van over te slaan: zie database-backup.yml.
+      # Wordt een van deze twee secrets ooit gewist of geroteerd, dan moet de
+      # mailsync stuk staan en niet een kwartierlijks leeg vinkje worden.
       - name: Controleer configuratie
-        id: configured
         run: |
-          if [ -n "$CRON_SECRET" ] && [ -n "$MATO_BASE_URL" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::CRON_SECRET of MATO_BASE_URL ontbreekt; mailsync overgeslagen."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+          missing=""
+          [ -z "$CRON_SECRET" ] && missing="$missing CRON_SECRET"
+          [ -z "$MATO_BASE_URL" ] && missing="$missing MATO_BASE_URL"
+          if [ -n "$missing" ]; then
+            echo "::error title=Mailsync niet gelopen::Ontbrekende secrets:$missing. Zet ze bij Settings -> Secrets and variables -> Actions. Zonder deze stap blijft een antwoord van een prospect onopgemerkt."
+            exit 1
           fi
 
       - name: Postvakken bijwerken
-        if: steps.configured.outputs.ready == 'true'
         run: |
           status=$(curl -sS --max-time 120 -o /tmp/mail-sync.json -w '%{http_code}' \
             -H "Authorization: Bearer $CRON_SECRET" \

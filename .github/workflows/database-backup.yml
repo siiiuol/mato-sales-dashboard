@@ -13,31 +13,32 @@ jobs:
       DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
       BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
     steps:
+      # Deze stap faalt met opzet in plaats van over te slaan.
+      #
+      # Hij waarschuwde eerst alleen en zette ready=false, waarna elke volgende
+      # stap werd overgeslagen en de run groen eindigde. Resultaat: maanden
+      # dagelijkse vinkjes van 4 tot 9 seconden zonder dat er ooit een back-up
+      # gemaakt is. Een back-up die niet kan lopen moet luid stuk staan, want
+      # een gemiste back-up merk je pas wanneer je hem nodig hebt.
       - name: Controleer configuratie
-        id: configured
         run: |
-          if [ -n "$DATABASE_URL" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::BACKUP_DATABASE_URL ontbreekt; back-up overgeslagen."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error title=Geen back-up gemaakt::Het secret BACKUP_DATABASE_URL ontbreekt, dus er is niets geback-upt. Zet hem bij Settings -> Secrets and variables -> Actions -> New repository secret, met de Postgres-verbindingsreeks van de productiedatabase (de directe verbinding, niet de pooler)."
+            exit 1
+          fi
+          if [ -z "$BLOB_READ_WRITE_TOKEN" ]; then
+            echo "::warning::BLOB_READ_WRITE_TOKEN ontbreekt. De back-up loopt wel, maar blijft alleen 35 dagen als artifact bij deze run staan; er gaat niets naar blob-opslag."
           fi
       - uses: actions/checkout@v4
-        if: steps.configured.outputs.ready == 'true'
       - uses: actions/setup-node@v4
-        if: steps.configured.outputs.ready == 'true'
         with:
           node-version: 20
           cache: npm
       - name: Installeer back-upprogramma's
-        if: steps.configured.outputs.ready == 'true'
         run: sudo apt-get update && sudo apt-get install -y postgresql-client sqlite3
       - run: npm ci
-        if: steps.configured.outputs.ready == 'true'
       - run: npm run backup
-        if: steps.configured.outputs.ready == 'true'
       - uses: actions/upload-artifact@v4
-        if: steps.configured.outputs.ready == 'true'
         with:
           name: mato-database-backup-${{ github.run_id }}
           path: backups/
