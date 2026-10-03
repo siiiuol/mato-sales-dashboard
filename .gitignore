@@ -37,6 +37,10 @@ yarn-error.log*
 
 # lead-bot
 lead-bot/.venv/
+
+# Python-bytecode: machinespecifiek, hoort niet in git
+__pycache__/
+*.pyc
 lead-bot/data/*.db
 lead-bot/data/**/*.db
 
