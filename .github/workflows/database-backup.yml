@@ -34,8 +34,32 @@ jobs:
         with:
           node-version: 20
           cache: npm
+      # pg_dump moet minstens zo nieuw zijn als de server, anders stopt hij met
+      # "server version mismatch" en maakt hij geen enkele back-up. Het pakket
+      # `postgresql-client` in ubuntu-latest is versie 16, terwijl de databanken
+      # op dit account Postgres 17 draaien — dus halen we de client uit de
+      # pakketbron van Postgres zelf. Nieuwer mag, ouder niet.
       - name: Installeer back-upprogramma's
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client sqlite3
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y sqlite3 curl ca-certificates lsb-release
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-17
+          # Het pakket installeren is niet genoeg: Debians pg_wrapper blijft de
+          # oudste client kiezen, dus `pg_dump --version` meldde nog steeds 16.15
+          # terwijl 17 er wel stond. Nagemeten op een testbranch. Daarom de map
+          # van 17 vooraan in PATH zetten voor de volgende stappen.
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Welke pg_dump gebruiken we
+        run: |
+          which pg_dump
+          pg_dump --version
       - run: npm ci
       - run: npm run backup
       - uses: actions/upload-artifact@v4
