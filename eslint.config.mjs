@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build output of `vercel deploy` from this machine. Het staat vol
+    // gegenereerde CommonJS-launchers, dus wie lokaal deployt en daarna lint
+    // kreeg fouten over code die hij niet geschreven heeft.
+    ".vercel/**",
   ]),
 ]);
 

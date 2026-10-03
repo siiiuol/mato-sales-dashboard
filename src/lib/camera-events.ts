@@ -1,5 +1,3 @@
-import "server-only";
-
 /**
  * Ontleedt de UniFi-webhookpayload.
  *
